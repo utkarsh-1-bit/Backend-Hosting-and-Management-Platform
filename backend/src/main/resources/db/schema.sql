@@ -24,24 +24,10 @@ CREATE TABLE applications (
         REFERENCES users(id)
 );
 
-CREATE TABLE deployments (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    application_id BIGINT NOT NULL,
-    commit_hash VARCHAR(64),
-    status VARCHAR(30) NOT NULL,
-    started_at TIMESTAMP NULL,
-    completed_at TIMESTAMP NULL,
-    error_message TEXT,
-
-    CONSTRAINT fk_deployments_application
-        FOREIGN KEY (application_id)
-        REFERENCES applications(id)
-);
 
 CREATE TABLE workload_jobs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     application_id BIGINT NOT NULL,
-    deployment_id BIGINT NULL,
     job_type VARCHAR(30) NOT NULL,
     status VARCHAR(30) NOT NULL,
     priority INT DEFAULT 0,
@@ -52,17 +38,12 @@ CREATE TABLE workload_jobs (
 
     CONSTRAINT fk_jobs_application
         FOREIGN KEY (application_id)
-        REFERENCES applications(id),
-
-    CONSTRAINT fk_jobs_deployment
-        FOREIGN KEY (deployment_id)
-        REFERENCES deployments(id)
+        REFERENCES applications(id)
 );
 
 CREATE TABLE containers (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     application_id BIGINT NOT NULL,
-    deployment_id BIGINT NOT NULL,
     docker_container_id VARCHAR(100) NOT NULL UNIQUE,
     image_name VARCHAR(255) NOT NULL,
     status VARCHAR(30) NOT NULL,
@@ -74,11 +55,7 @@ CREATE TABLE containers (
 
     CONSTRAINT fk_containers_application
         FOREIGN KEY (application_id)
-        REFERENCES applications(id),
-
-    CONSTRAINT fk_containers_deployment
-        FOREIGN KEY (deployment_id)
-        REFERENCES deployments(id)
+        REFERENCES applications(id)
 );
 
 CREATE TABLE environment_variables (

@@ -8,7 +8,6 @@ public class WorkloadJob {
     
     private Long id;
     private Long applicationId;
-    private Long deploymentId;
     private String jobType;
     private String status;
     private Integer priority;

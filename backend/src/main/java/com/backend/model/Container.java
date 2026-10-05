@@ -8,7 +8,6 @@ public class Container {
     
     private Long id;
     private Long applicationId;
-    private Long deploymentId;
     private String dockerContainerId;
     private String imageName;
     private String status;

@@ -15,7 +15,6 @@ public class ContainerRowMapper implements RowMapper<Container> {
 
         container.setId(rs.getLong("id"));
         container.setApplicationId(rs.getLong("application_id"));
-        container.setDeploymentId(rs.getLong("deployment_id"));
         container.setDockerContainerId(
                 rs.getString("docker_container_id"));
         container.setImageName(rs.getString("image_name"));

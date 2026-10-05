@@ -1,7 +1,6 @@
 package com.backend.dao;
 
 import com.backend.model.Application;
-import com.backend.model.Deployment;
 import com.backend.model.User;
 import com.backend.model.WorkloadJob;
 import org.junit.jupiter.api.Test;
@@ -24,9 +23,6 @@ class WorkloadJobDaoTest {
 
         @Autowired
         private ApplicationDao applicationDao;
-
-        @Autowired
-        private DeploymentDao deploymentDao;
 
         private Long createTestUser() {
 
@@ -66,31 +62,13 @@ class WorkloadJobDaoTest {
                                 .getId();
         }
 
-        private Long createTestDeployment(Long applicationId) {
-
-                Deployment deployment = new Deployment();
-
-                deployment.setApplicationId(applicationId);
-                deployment.setCommitHash("abc123");
-                deployment.setStatus("QUEUED");
-
-                deploymentDao.createDeployment(deployment);
-
-                return deploymentDao
-                                .findByApplicationId(applicationId)
-                                .get(0)
-                                .getId();
-        }
-
         private Long createTestJob() {
 
                 Long applicationId = createTestApplication();
-                Long deploymentId = createTestDeployment(applicationId);
 
                 WorkloadJob job = new WorkloadJob();
 
                 job.setApplicationId(applicationId);
-                job.setDeploymentId(deploymentId);
                 job.setJobType("BUILD");
                 job.setStatus("QUEUED");
                 job.setPriority(1);
@@ -108,12 +86,10 @@ class WorkloadJobDaoTest {
         void createAndFindJob() {
 
                 Long applicationId = createTestApplication();
-                Long deploymentId = createTestDeployment(applicationId);
 
                 WorkloadJob job = new WorkloadJob();
 
                 job.setApplicationId(applicationId);
-                job.setDeploymentId(deploymentId);
                 job.setJobType("BUILD");
                 job.setStatus("QUEUED");
                 job.setPriority(1);
@@ -129,7 +105,6 @@ class WorkloadJobDaoTest {
 
                 assertNotNull(saved);
                 assertEquals(applicationId, saved.getApplicationId());
-                assertEquals(deploymentId, saved.getDeploymentId());
                 assertEquals("BUILD", saved.getJobType());
                 assertEquals("QUEUED", saved.getStatus());
                 assertEquals(1, saved.getPriority());
@@ -151,12 +126,10 @@ class WorkloadJobDaoTest {
         void findJobsByApplicationId() {
 
                 Long applicationId = createTestApplication();
-                Long deploymentId = createTestDeployment(applicationId);
 
                 WorkloadJob job1 = new WorkloadJob();
 
                 job1.setApplicationId(applicationId);
-                job1.setDeploymentId(deploymentId);
                 job1.setJobType("BUILD");
                 job1.setStatus("QUEUED");
                 job1.setPriority(1);
@@ -165,7 +138,6 @@ class WorkloadJobDaoTest {
                 WorkloadJob job2 = new WorkloadJob();
 
                 job2.setApplicationId(applicationId);
-                job2.setDeploymentId(deploymentId);
                 job2.setJobType("DEPLOY");
                 job2.setStatus("QUEUED");
                 job2.setPriority(2);
@@ -181,48 +153,13 @@ class WorkloadJobDaoTest {
         }
 
         @Test
-        void findJobsByDeploymentId() {
-
-                Long applicationId = createTestApplication();
-                Long deploymentId = createTestDeployment(applicationId);
-
-                WorkloadJob job1 = new WorkloadJob();
-
-                job1.setApplicationId(applicationId);
-                job1.setDeploymentId(deploymentId);
-                job1.setJobType("BUILD");
-                job1.setStatus("QUEUED");
-                job1.setPriority(1);
-                job1.setBurstTime(30);
-
-                WorkloadJob job2 = new WorkloadJob();
-
-                job2.setApplicationId(applicationId);
-                job2.setDeploymentId(deploymentId);
-                job2.setJobType("DEPLOY");
-                job2.setStatus("QUEUED");
-                job2.setPriority(1);
-                job2.setBurstTime(15);
-
-                workloadJobDao.createJob(job1);
-                workloadJobDao.createJob(job2);
-
-                List<WorkloadJob> jobs = workloadJobDao
-                                .findByDeploymentId(deploymentId);
-
-                assertEquals(2, jobs.size());
-        }
-
-        @Test
         void findQueuedJobs() {
 
                 Long applicationId = createTestApplication();
-                Long deploymentId = createTestDeployment(applicationId);
 
                 WorkloadJob job = new WorkloadJob();
 
                 job.setApplicationId(applicationId);
-                job.setDeploymentId(deploymentId);
                 job.setJobType("BUILD");
                 job.setStatus("QUEUED");
                 job.setPriority(1);

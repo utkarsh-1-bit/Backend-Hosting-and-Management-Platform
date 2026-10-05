@@ -15,7 +15,6 @@ public class WorkloadJobRowMapper implements RowMapper<WorkloadJob> {
 
         job.setId(rs.getLong("id"));
         job.setApplicationId(rs.getLong("application_id"));
-        job.setDeploymentId(rs.getLong("deployment_id"));
         job.setJobType(rs.getString("job_type"));
         job.setStatus(rs.getString("status"));
         job.setPriority(rs.getInt("priority"));

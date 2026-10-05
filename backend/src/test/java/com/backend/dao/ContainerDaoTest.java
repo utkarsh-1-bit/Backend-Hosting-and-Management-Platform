@@ -2,7 +2,6 @@ package com.backend.dao;
 
 import com.backend.model.Application;
 import com.backend.model.Container;
-import com.backend.model.Deployment;
 import com.backend.model.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,335 +15,279 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 class ContainerDaoTest {
 
-    @Autowired
-    private ContainerDao containerDao;
+        @Autowired
+        private ContainerDao containerDao;
 
-    @Autowired
-    private UserDao userDao;
+        @Autowired
+        private UserDao userDao;
 
-    @Autowired
-    private ApplicationDao applicationDao;
+        @Autowired
+        private ApplicationDao applicationDao;
 
-    @Autowired
-    private DeploymentDao deploymentDao;
+        private Long createTestUser() {
 
-    private Long createTestUser() {
+                User user = new User();
 
-        User user = new User();
+                user.setName("Container Test User");
+                user.setEmail(
+                                "container" + System.nanoTime() + "@test.com");
+                user.setPassword("password");
 
-        user.setName("Container Test User");
-        user.setEmail(
-                "container" + System.nanoTime() + "@test.com");
-        user.setPassword("password");
+                userDao.createUser(user);
 
-        userDao.createUser(user);
+                return userDao.findByEmail(user.getEmail()).getId();
+        }
 
-        return userDao.findByEmail(user.getEmail()).getId();
-    }
+        private Long createTestApplication() {
 
-    private Long createTestApplication() {
+                Long userId = createTestUser();
 
-        Long userId = createTestUser();
+                Application application = new Application();
 
-        Application application = new Application();
+                application.setUserId(userId);
+                application.setName(
+                                "container-app-" + System.nanoTime());
+                application.setRepositoryUrl(
+                                "https://github.com/test/container");
+                application.setBranch("main");
+                application.setBuildCommand("docker build .");
+                application.setStartCommand("docker run app");
+                application.setStatus("CREATED");
 
-        application.setUserId(userId);
-        application.setName(
-                "container-app-" + System.nanoTime());
-        application.setRepositoryUrl(
-                "https://github.com/test/container");
-        application.setBranch("main");
-        application.setBuildCommand("docker build .");
-        application.setStartCommand("docker run app");
-        application.setStatus("CREATED");
+                applicationDao.createApplication(application);
 
-        applicationDao.createApplication(application);
+                return applicationDao
+                                .findByUserId(userId)
+                                .get(0)
+                                .getId();
+        }
 
-        return applicationDao
-                .findByUserId(userId)
-                .get(0)
-                .getId();
-    }
+        private Long createTestContainer() {
 
-    private Long createTestDeployment(Long applicationId) {
+                Long applicationId = createTestApplication();
 
-        Deployment deployment = new Deployment();
+                Container container = new Container();
 
-        deployment.setApplicationId(applicationId);
-        deployment.setCommitHash("container123");
-        deployment.setStatus("DEPLOYED");
+                container.setApplicationId(applicationId);
+                container.setDockerContainerId(
+                                "docker-" + System.nanoTime());
+                container.setImageName("test-app:latest");
+                container.setStatus("CREATED");
+                container.setHostPort(8081);
+                container.setContainerPort(8080);
 
-        deploymentDao.createDeployment(deployment);
+                containerDao.createContainer(container);
 
-        return deploymentDao
-                .findByApplicationId(applicationId)
-                .get(0)
-                .getId();
-    }
+                return containerDao
+                                .findByApplicationId(applicationId)
+                                .get(0)
+                                .getId();
+        }
 
-    private Long createTestContainer() {
+        @Test
+        void createAndFindContainer() {
 
-        Long applicationId = createTestApplication();
+                Long applicationId = createTestApplication();
 
-        Long deploymentId = createTestDeployment(applicationId);
+                Container container = new Container();
 
-        Container container = new Container();
+                container.setApplicationId(applicationId);
+                container.setDockerContainerId(
+                                "docker-" + System.nanoTime());
+                container.setImageName("test-app:latest");
+                container.setStatus("CREATED");
+                container.setHostPort(8081);
+                container.setContainerPort(8080);
 
-        container.setApplicationId(applicationId);
-        container.setDeploymentId(deploymentId);
-        container.setDockerContainerId(
-                "docker-" + System.nanoTime());
-        container.setImageName("test-app:latest");
-        container.setStatus("CREATED");
-        container.setHostPort(8081);
-        container.setContainerPort(8080);
+                int rows = containerDao.createContainer(container);
 
-        containerDao.createContainer(container);
+                assertEquals(1, rows);
 
-        return containerDao
-                .findByApplicationId(applicationId)
-                .get(0)
-                .getId();
-    }
+                Container saved = containerDao
+                                .findByApplicationId(applicationId)
+                                .get(0);
 
-    @Test
-    void createAndFindContainer() {
+                assertNotNull(saved);
+                assertEquals(applicationId, saved.getApplicationId());
+                assertEquals("test-app:latest", saved.getImageName());
+                assertEquals("CREATED", saved.getStatus());
+                assertEquals(8081, saved.getHostPort());
+                assertEquals(8080, saved.getContainerPort());
+        }
 
-        Long applicationId = createTestApplication();
+        @Test
+        void findContainerById() {
 
-        Long deploymentId = createTestDeployment(applicationId);
+                Long containerId = createTestContainer();
 
-        Container container = new Container();
+                Container container = containerDao.findById(containerId);
 
-        container.setApplicationId(applicationId);
-        container.setDeploymentId(deploymentId);
-        container.setDockerContainerId(
-                "docker-" + System.nanoTime());
-        container.setImageName("test-app:latest");
-        container.setStatus("CREATED");
-        container.setHostPort(8081);
-        container.setContainerPort(8080);
+                assertNotNull(container);
+                assertEquals(containerId, container.getId());
+        }
 
-        int rows = containerDao.createContainer(container);
+        @Test
+        void findContainerByDockerId() {
 
-        assertEquals(1, rows);
+                Long applicationId = createTestApplication();
 
-        Container saved = containerDao
-                .findByApplicationId(applicationId)
-                .get(0);
+                String dockerId = "docker-" + System.nanoTime();
 
-        assertNotNull(saved);
-        assertEquals(applicationId, saved.getApplicationId());
-        assertEquals(deploymentId, saved.getDeploymentId());
-        assertEquals("test-app:latest", saved.getImageName());
-        assertEquals("CREATED", saved.getStatus());
-        assertEquals(8081, saved.getHostPort());
-        assertEquals(8080, saved.getContainerPort());
-    }
+                Container container = new Container();
 
-    @Test
-    void findContainerById() {
+                container.setApplicationId(applicationId);
+                container.setDockerContainerId(dockerId);
+                container.setImageName("test-image");
+                container.setStatus("CREATED");
+                container.setHostPort(8082);
+                container.setContainerPort(8080);
 
-        Long containerId = createTestContainer();
+                containerDao.createContainer(container);
 
-        Container container = containerDao.findById(containerId);
+                Container saved = containerDao.findByDockerContainerId(dockerId);
 
-        assertNotNull(container);
-        assertEquals(containerId, container.getId());
-    }
+                assertNotNull(saved);
+                assertEquals(dockerId, saved.getDockerContainerId());
+        }
 
-    @Test
-    void findContainerByDockerId() {
+        @Test
+        void findContainersByApplicationId() {
 
-        Long applicationId = createTestApplication();
-        Long deploymentId = createTestDeployment(applicationId);
+                Long applicationId = createTestApplication();
 
-        String dockerId = "docker-" + System.nanoTime();
+                Container container1 = createContainer(
+                                applicationId,
+                                "image-one:latest");
 
-        Container container = new Container();
+                Container container2 = createContainer(
+                                applicationId,
+                                "image-two:latest");
 
-        container.setApplicationId(applicationId);
-        container.setDeploymentId(deploymentId);
-        container.setDockerContainerId(dockerId);
-        container.setImageName("test-image");
-        container.setStatus("CREATED");
-        container.setHostPort(8082);
-        container.setContainerPort(8080);
+                containerDao.createContainer(container1);
+                containerDao.createContainer(container2);
 
-        containerDao.createContainer(container);
+                List<Container> containers = containerDao.findByApplicationId(applicationId);
 
-        Container saved = containerDao.findByDockerContainerId(dockerId);
+                assertEquals(2, containers.size());
+        }
 
-        assertNotNull(saved);
-        assertEquals(dockerId, saved.getDockerContainerId());
-    }
+        @Test
+        void findRunningContainerByApplicationId() {
 
-    @Test
-    void findContainersByApplicationId() {
+                Long applicationId = createTestApplication();
 
-        Long applicationId = createTestApplication();
-        Long deploymentId = createTestDeployment(applicationId);
+                Container container = createContainer(
+                                applicationId,
+                                "running-image:latest");
 
-        Container container1 = createContainer(
-                applicationId,
-                deploymentId,
-                "image-one:latest");
+                container.setStatus("RUNNING");
 
-        Container container2 = createContainer(
-                applicationId,
-                deploymentId,
-                "image-two:latest");
+                containerDao.createContainer(container);
 
-        containerDao.createContainer(container1);
-        containerDao.createContainer(container2);
+                Container running = containerDao
+                                .findRunningByApplicationId(applicationId);
 
-        List<Container> containers = containerDao.findByApplicationId(applicationId);
+                assertNotNull(running);
+                assertEquals("RUNNING", running.getStatus());
+        }
 
-        assertEquals(2, containers.size());
-    }
+        @Test
+        void updateContainerStatus() {
 
-    @Test
-    void findContainersByDeploymentId() {
+                Long containerId = createTestContainer();
 
-        Long applicationId = createTestApplication();
-        Long deploymentId = createTestDeployment(applicationId);
+                int rows = containerDao.updateStatus(
+                                containerId,
+                                "STARTING");
 
-        Container container = createContainer(
-                applicationId,
-                deploymentId,
-                "deployment-image:latest");
+                assertEquals(1, rows);
 
-        containerDao.createContainer(container);
+                Container container = containerDao.findById(containerId);
 
-        List<Container> containers = containerDao.findByDeploymentId(deploymentId);
+                assertEquals("STARTING", container.getStatus());
+        }
 
-        assertEquals(1, containers.size());
-        assertEquals(
-                deploymentId,
-                containers.get(0).getDeploymentId());
-    }
+        @Test
+        void markContainerStarted() {
 
-    @Test
-    void findRunningContainerByApplicationId() {
+                Long containerId = createTestContainer();
 
-        Long applicationId = createTestApplication();
-        Long deploymentId = createTestDeployment(applicationId);
+                Timestamp startTime = new Timestamp(System.currentTimeMillis());
 
-        Container container = createContainer(
-                applicationId,
-                deploymentId,
-                "running-image:latest");
+                int rows = containerDao.markStarted(
+                                containerId,
+                                startTime);
 
-        container.setStatus("RUNNING");
+                assertEquals(1, rows);
 
-        containerDao.createContainer(container);
+                Container container = containerDao.findById(containerId);
 
-        Container running = containerDao
-                .findRunningByApplicationId(applicationId);
+                assertEquals("RUNNING", container.getStatus());
+                assertNotNull(container.getStartedAt());
+        }
 
-        assertNotNull(running);
-        assertEquals("RUNNING", running.getStatus());
-    }
+        @Test
+        void markContainerStopped() {
 
-    @Test
-    void updateContainerStatus() {
+                Long containerId = createTestContainer();
 
-        Long containerId = createTestContainer();
+                Timestamp stopTime = new Timestamp(System.currentTimeMillis());
 
-        int rows = containerDao.updateStatus(
-                containerId,
-                "STARTING");
+                int rows = containerDao.markStopped(
+                                containerId,
+                                stopTime);
 
-        assertEquals(1, rows);
+                assertEquals(1, rows);
 
-        Container container = containerDao.findById(containerId);
+                Container container = containerDao.findById(containerId);
 
-        assertEquals("STARTING", container.getStatus());
-    }
+                assertEquals("STOPPED", container.getStatus());
+                assertNotNull(container.getStoppedAt());
+        }
 
-    @Test
-    void markContainerStarted() {
+        @Test
+        void markContainerCrashed() {
 
-        Long containerId = createTestContainer();
+                Long containerId = createTestContainer();
 
-        Timestamp startTime = new Timestamp(System.currentTimeMillis());
+                int rows = containerDao.markCrashed(containerId);
 
-        int rows = containerDao.markStarted(
-                containerId,
-                startTime);
+                assertEquals(1, rows);
 
-        assertEquals(1, rows);
+                Container container = containerDao.findById(containerId);
 
-        Container container = containerDao.findById(containerId);
+                assertEquals("CRASHED", container.getStatus());
+        }
 
-        assertEquals("RUNNING", container.getStatus());
-        assertNotNull(container.getStartedAt());
-    }
+        @Test
+        void deleteContainer() {
 
-    @Test
-    void markContainerStopped() {
+                Long containerId = createTestContainer();
 
-        Long containerId = createTestContainer();
+                int rows = containerDao.deleteContainer(containerId);
 
-        Timestamp stopTime = new Timestamp(System.currentTimeMillis());
+                assertEquals(1, rows);
 
-        int rows = containerDao.markStopped(
-                containerId,
-                stopTime);
+                assertThrows(
+                                Exception.class,
+                                () -> containerDao.findById(containerId));
+        }
 
-        assertEquals(1, rows);
+        private Container createContainer(
+                        Long applicationId,
+                        String imageName) {
 
-        Container container = containerDao.findById(containerId);
+                Container container = new Container();
 
-        assertEquals("STOPPED", container.getStatus());
-        assertNotNull(container.getStoppedAt());
-    }
+                container.setApplicationId(applicationId);
+                container.setDockerContainerId(
+                                "docker-" + System.nanoTime());
+                container.setImageName(imageName);
+                container.setStatus("CREATED");
+                container.setHostPort(
+                                8000 + (int) (Math.random() * 1000));
+                container.setContainerPort(8080);
 
-    @Test
-    void markContainerCrashed() {
-
-        Long containerId = createTestContainer();
-
-        int rows = containerDao.markCrashed(containerId);
-
-        assertEquals(1, rows);
-
-        Container container = containerDao.findById(containerId);
-
-        assertEquals("CRASHED", container.getStatus());
-    }
-
-    @Test
-    void deleteContainer() {
-
-        Long containerId = createTestContainer();
-
-        int rows = containerDao.deleteContainer(containerId);
-
-        assertEquals(1, rows);
-
-        assertThrows(
-                Exception.class,
-                () -> containerDao.findById(containerId));
-    }
-
-    private Container createContainer(
-            Long applicationId,
-            Long deploymentId,
-            String imageName) {
-
-        Container container = new Container();
-
-        container.setApplicationId(applicationId);
-        container.setDeploymentId(deploymentId);
-        container.setDockerContainerId(
-                "docker-" + System.nanoTime());
-        container.setImageName(imageName);
-        container.setStatus("CREATED");
-        container.setHostPort(
-                8000 + (int) (Math.random() * 1000));
-        container.setContainerPort(8080);
-
-        return container;
-    }
+                return container;
+        }
 }

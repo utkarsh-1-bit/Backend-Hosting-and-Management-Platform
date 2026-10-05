@@ -21,15 +21,14 @@ public class WorkloadJobDao {
 
         String sql = """
                 INSERT INTO workload_jobs
-                (application_id, deployment_id, job_type,
+                (application_id, job_type,
                  status, priority, burst_time)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """;
 
         return jdbcTemplate.update(
                 sql,
                 job.getApplicationId(),
-                job.getDeploymentId(),
                 job.getJobType(),
                 job.getStatus(),
                 job.getPriority(),
@@ -39,7 +38,7 @@ public class WorkloadJobDao {
     public WorkloadJob findById(Long id) {
 
         String sql = """
-                SELECT id, application_id, deployment_id,
+                SELECT id, application_id,
                        job_type, status, priority,
                        arrival_time, burst_time,
                        start_time, completion_time
@@ -56,7 +55,7 @@ public class WorkloadJobDao {
     public List<WorkloadJob> findByApplicationId(Long applicationId) {
 
         String sql = """
-                SELECT id, application_id, deployment_id,
+                SELECT id, application_id,
                        job_type, status, priority,
                        arrival_time, burst_time,
                        start_time, completion_time
@@ -71,28 +70,10 @@ public class WorkloadJobDao {
                 applicationId);
     }
 
-    public List<WorkloadJob> findByDeploymentId(Long deploymentId) {
-
-        String sql = """
-                SELECT id, application_id, deployment_id,
-                       job_type, status, priority,
-                       arrival_time, burst_time,
-                       start_time, completion_time
-                FROM workload_jobs
-                WHERE deployment_id = ?
-                ORDER BY id ASC
-                """;
-
-        return jdbcTemplate.query(
-                sql,
-                new WorkloadJobRowMapper(),
-                deploymentId);
-    }
-
     public List<WorkloadJob> findQueuedJobs() {
 
         String sql = """
-                SELECT id, application_id, deployment_id,
+                SELECT id, application_id,
                        job_type, status, priority,
                        arrival_time, burst_time,
                        start_time, completion_time
