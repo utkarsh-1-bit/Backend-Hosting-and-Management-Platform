@@ -3,8 +3,11 @@ package com.backend.dao;
 import com.backend.dao.mapper.WorkloadJobRowMapper;
 import com.backend.model.WorkloadJob;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -17,8 +20,7 @@ public class WorkloadJobDao {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public int createJob(WorkloadJob job) {
-
+    public Long createJob(WorkloadJob job) {
         String sql = """
                 INSERT INTO workload_jobs
                 (application_id, job_type,
@@ -26,13 +28,22 @@ public class WorkloadJobDao {
                 VALUES (?, ?, ?, ?, ?)
                 """;
 
-        return jdbcTemplate.update(
-                sql,
-                job.getApplicationId(),
-                job.getJobType(),
-                job.getStatus(),
-                job.getPriority(),
-                job.getBurstTime());
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    sql,
+                    new String[] { "id" });
+            ps.setLong(1, job.getApplicationId()); // Adjust to setInt/setLong based on your ID type
+            ps.setString(2, job.getJobType()); // Adjust if jobType is an Enum (e.g., job.getJobType().name())
+            ps.setString(3, job.getStatus()); // Adjust if status is an Enum
+            ps.setInt(4, job.getPriority());
+            ps.setInt(5, job.getBurstTime());
+            return ps;
+        }, keyHolder);
+
+        // Return the generated primary key
+        return keyHolder.getKey().longValue();
     }
 
     public WorkloadJob findById(Long id) {

@@ -3,153 +3,167 @@ package com.backend.dao;
 import com.backend.dao.mapper.ApplicationRowMapper;
 import com.backend.model.Application;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.util.List;
 
 @Repository
 public class ApplicationDao {
 
-    private final JdbcTemplate jdbcTemplate;
+        private final JdbcTemplate jdbcTemplate;
 
-    public ApplicationDao(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+        public ApplicationDao(JdbcTemplate jdbcTemplate) {
+                this.jdbcTemplate = jdbcTemplate;
+        }
 
-    // 1. CREATE
-    public int createApplication(Application application) {
+        // 1. CREATE
+        public Long createApplication(Application application) {
 
-        String sql = """
-                INSERT INTO applications
-                (user_id, name, repository_url, branch,
-                 build_command, start_command, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """;
+                String sql = """
+                                INSERT INTO applications
+                                (user_id, name, repository_url, branch, build_command,
+                                 start_command, status)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """;
 
-        return jdbcTemplate.update(
-                sql,
-                application.getUserId(),
-                application.getName(),
-                application.getRepositoryUrl(),
-                application.getBranch(),
-                application.getBuildCommand(),
-                application.getStartCommand(),
-                application.getStatus());
-    }
+                KeyHolder keyHolder = new GeneratedKeyHolder();
 
-    // 2. FIND BY ID
-    public Application findById(Long id) {
+                jdbcTemplate.update(connection -> {
 
-        String sql = """
-                SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status,
-                       created_at, updated_at
-                FROM applications
-                WHERE id = ?
-                """;
+                        PreparedStatement ps = connection.prepareStatement(
+                                        sql,
+                                        new String[] { "id" });
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new ApplicationRowMapper(),
-                id);
-    }
+                        ps.setLong(1, application.getUserId());
+                        ps.setString(2, application.getName());
+                        ps.setString(3, application.getRepositoryUrl());
+                        ps.setString(4, application.getBranch());
+                        ps.setString(5, application.getBuildCommand());
+                        ps.setString(6, application.getStartCommand());
+                        ps.setString(7, application.getStatus());
 
-    // 3. FIND ALL APPLICATIONS OF A USER
-    public List<Application> findByUserId(Long userId) {
+                        return ps;
+                }, keyHolder);
 
-        String sql = """
-                SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status,
-                       created_at, updated_at
-                FROM applications
-                WHERE user_id = ?
-                ORDER BY created_at DESC
-                """;
+                return keyHolder.getKey().longValue();
+        }
 
-        return jdbcTemplate.query(
-                sql,
-                new ApplicationRowMapper(),
-                userId);
-    }
+        // 2. FIND BY ID
+        public Application findById(Long id) {
 
-    // 4. FIND ALL
-    public List<Application> findAll() {
+                String sql = """
+                                SELECT id, user_id, name, repository_url, branch,
+                                       build_command, start_command, status,
+                                       created_at, updated_at
+                                FROM applications
+                                WHERE id = ?
+                                """;
 
-        String sql = """
-                SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status,
-                       created_at, updated_at
-                FROM applications
-                ORDER BY created_at DESC
-                """;
+                return jdbcTemplate.queryForObject(
+                                sql,
+                                new ApplicationRowMapper(),
+                                id);
+        }
 
-        return jdbcTemplate.query(
-                sql,
-                new ApplicationRowMapper());
-    }
+        // 3. FIND ALL APPLICATIONS OF A USER
+        public List<Application> findByUserId(Long userId) {
 
-    // 5. UPDATE
-    public int updateApplication(Application application) {
+                String sql = """
+                                SELECT id, user_id, name, repository_url, branch,
+                                       build_command, start_command, status,
+                                       created_at, updated_at
+                                FROM applications
+                                WHERE user_id = ?
+                                ORDER BY created_at DESC
+                                """;
 
-        String sql = """
-                UPDATE applications
-                SET name = ?,
-                    repository_url = ?,
-                    branch = ?,
-                    build_command = ?,
-                    start_command = ?
-                WHERE id = ?
-                """;
+                return jdbcTemplate.query(
+                                sql,
+                                new ApplicationRowMapper(),
+                                userId);
+        }
 
-        return jdbcTemplate.update(
-                sql,
-                application.getName(),
-                application.getRepositoryUrl(),
-                application.getBranch(),
-                application.getBuildCommand(),
-                application.getStartCommand(),
-                application.getId());
-    }
+        // 4. FIND ALL
+        public List<Application> findAll() {
 
-    // 6. UPDATE STATUS
-    public int updateStatus(Long id, String status) {
+                String sql = """
+                                SELECT id, user_id, name, repository_url, branch,
+                                       build_command, start_command, status,
+                                       created_at, updated_at
+                                FROM applications
+                                ORDER BY created_at DESC
+                                """;
 
-        String sql = """
-                UPDATE applications
-                SET status = ?
-                WHERE id = ?
-                """;
+                return jdbcTemplate.query(
+                                sql,
+                                new ApplicationRowMapper());
+        }
 
-        return jdbcTemplate.update(sql, status, id);
-    }
+        // 5. UPDATE
+        public int updateApplication(Application application) {
 
-    // 7. DELETE
-    public int deleteApplication(Long id) {
+                String sql = """
+                                UPDATE applications
+                                SET name = ?,
+                                    repository_url = ?,
+                                    branch = ?,
+                                    build_command = ?,
+                                    start_command = ?
+                                WHERE id = ?
+                                """;
 
-        String sql = """
-                DELETE FROM applications
-                WHERE id = ?
-                """;
+                return jdbcTemplate.update(
+                                sql,
+                                application.getName(),
+                                application.getRepositoryUrl(),
+                                application.getBranch(),
+                                application.getBuildCommand(),
+                                application.getStartCommand(),
+                                application.getId());
+        }
 
-        return jdbcTemplate.update(sql, id);
-    }
+        // 6. UPDATE STATUS
+        public int updateStatus(Long id, String status) {
 
-    // 8. CHECK APPLICATION NAME FOR USER
-    public boolean existsByNameForUser(Long userId, String name) {
+                String sql = """
+                                UPDATE applications
+                                SET status = ?
+                                WHERE id = ?
+                                """;
 
-        String sql = """
-                SELECT COUNT(*)
-                FROM applications
-                WHERE user_id = ?
-                  AND name = ?
-                """;
+                return jdbcTemplate.update(sql, status, id);
+        }
 
-        Integer count = jdbcTemplate.queryForObject(
-                sql,
-                Integer.class,
-                userId,
-                name);
+        // 7. DELETE
+        public int deleteApplication(Long id) {
 
-        return count != null && count > 0;
-    }
+                String sql = """
+                                DELETE FROM applications
+                                WHERE id = ?
+                                """;
+
+                return jdbcTemplate.update(sql, id);
+        }
+
+        // 8. CHECK APPLICATION NAME FOR USER
+        public boolean existsByNameForUser(Long userId, String name) {
+
+                String sql = """
+                                SELECT COUNT(*)
+                                FROM applications
+                                WHERE user_id = ?
+                                  AND name = ?
+                                """;
+
+                Integer count = jdbcTemplate.queryForObject(
+                                sql,
+                                Integer.class,
+                                userId,
+                                name);
+
+                return count != null && count > 0;
+        }
 }
