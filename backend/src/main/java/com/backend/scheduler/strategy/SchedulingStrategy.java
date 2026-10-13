@@ -1,4 +1,4 @@
-package com.backend.scheduler;
+package com.backend.scheduler.strategy;
 
 import com.backend.model.WorkloadJob;
 

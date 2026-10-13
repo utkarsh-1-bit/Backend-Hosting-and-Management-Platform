@@ -1,6 +1,7 @@
-package com.backend.scheduler;
+package com.backend.scheduler.strategy;
 
 import com.backend.model.WorkloadJob;
+
 import org.springframework.stereotype.Component;
 
 import java.util.List;

@@ -3,174 +3,184 @@ package com.backend.dao;
 import com.backend.dao.mapper.ContainerRowMapper;
 import com.backend.model.Container;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.util.List;
 
 @Repository
 public class ContainerDao {
 
-        private final JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
 
-        public ContainerDao(JdbcTemplate jdbcTemplate) {
-                this.jdbcTemplate = jdbcTemplate;
-        }
+    public ContainerDao(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
-        public int createContainer(Container container) {
+    public Long createContainer(Container container) {
+        String sql = """
+                INSERT INTO containers
+                (application_id, docker_container_id, image_name,
+                 status, host_port, container_port)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """;
 
-                String sql = """
-                                INSERT INTO containers
-                                (application_id,
-                                 docker_container_id, image_name,
-                                 status, host_port, container_port)
-                                VALUES (?, ?, ?, ?, ?, ?)
-                                """;
+        KeyHolder keyHolder = new GeneratedKeyHolder();
 
-                return jdbcTemplate.update(
-                                sql,
-                                container.getApplicationId(),
-                                container.getDockerContainerId(),
-                                container.getImageName(),
-                                container.getStatus(),
-                                container.getHostPort(),
-                                container.getContainerPort());
-        }
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    sql,
+                    new String[] { "id" });
+            ps.setLong(1, container.getApplicationId()); // Adjust to setInt/setLong based on your database ID type
+            ps.setString(2, container.getDockerContainerId());
+            ps.setString(3, container.getImageName());
+            ps.setString(4, container.getStatus());
+            ps.setInt(5, container.getHostPort());
+            ps.setInt(6, container.getContainerPort());
+            return ps;
+        }, keyHolder);
 
-        public Container findById(Long id) {
+        // Return the generated primary key as a Long
+        return keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
+    }
 
-                String sql = """
-                                SELECT id, application_id,
-                                       docker_container_id, image_name,
-                                       status, host_port, container_port,
-                                       created_at, started_at, stopped_at
-                                FROM containers
-                                WHERE id = ?
-                                """;
+    public Container findById(Long id) {
 
-                return jdbcTemplate.queryForObject(
-                                sql,
-                                new ContainerRowMapper(),
-                                id);
-        }
+        String sql = """
+                SELECT id, application_id,
+                       docker_container_id, image_name,
+                       status, host_port, container_port,
+                       created_at, started_at, stopped_at
+                FROM containers
+                WHERE id = ?
+                """;
 
-        public Container findByDockerContainerId(
-                        String dockerContainerId) {
+        return jdbcTemplate.queryForObject(
+                sql,
+                new ContainerRowMapper(),
+                id);
+    }
 
-                String sql = """
-                                SELECT id, application_id,
-                                       docker_container_id, image_name,
-                                       status, host_port, container_port,
-                                       created_at, started_at, stopped_at
-                                FROM containers
-                                WHERE docker_container_id = ?
-                                """;
+    public Container findByDockerContainerId(
+            String dockerContainerId) {
 
-                return jdbcTemplate.queryForObject(
-                                sql,
-                                new ContainerRowMapper(),
-                                dockerContainerId);
-        }
+        String sql = """
+                SELECT id, application_id,
+                       docker_container_id, image_name,
+                       status, host_port, container_port,
+                       created_at, started_at, stopped_at
+                FROM containers
+                WHERE docker_container_id = ?
+                """;
 
-        public List<Container> findByApplicationId(
-                        Long applicationId) {
+        return jdbcTemplate.queryForObject(
+                sql,
+                new ContainerRowMapper(),
+                dockerContainerId);
+    }
 
-                String sql = """
-                                SELECT id, application_id,
-                                       docker_container_id, image_name,
-                                       status, host_port, container_port,
-                                       created_at, started_at, stopped_at
-                                FROM containers
-                                WHERE application_id = ?
-                                ORDER BY id DESC
-                                """;
+    public List<Container> findByApplicationId(
+            Long applicationId) {
 
-                return jdbcTemplate.query(
-                                sql,
-                                new ContainerRowMapper(),
-                                applicationId);
-        }
+        String sql = """
+                SELECT id, application_id,
+                       docker_container_id, image_name,
+                       status, host_port, container_port,
+                       created_at, started_at, stopped_at
+                FROM containers
+                WHERE application_id = ?
+                ORDER BY id DESC
+                """;
 
-        public Container findRunningByApplicationId(
-                        Long applicationId) {
+        return jdbcTemplate.query(
+                sql,
+                new ContainerRowMapper(),
+                applicationId);
+    }
 
-                String sql = """
-                                SELECT id, application_id,
-                                       docker_container_id, image_name,
-                                       status, host_port, container_port,
-                                       created_at, started_at, stopped_at
-                                FROM containers
-                                WHERE application_id = ?
-                                  AND status = 'RUNNING'
-                                ORDER BY id DESC
-                                LIMIT 1
-                                """;
+    public Container findRunningByApplicationId(
+            Long applicationId) {
 
-                return jdbcTemplate.queryForObject(
-                                sql,
-                                new ContainerRowMapper(),
-                                applicationId);
-        }
+        String sql = """
+                SELECT id, application_id,
+                       docker_container_id, image_name,
+                       status, host_port, container_port,
+                       created_at, started_at, stopped_at
+                FROM containers
+                WHERE application_id = ?
+                  AND status = 'RUNNING'
+                ORDER BY id DESC
+                LIMIT 1
+                """;
 
-        public int updateStatus(Long id, String status) {
+        return jdbcTemplate.queryForObject(
+                sql,
+                new ContainerRowMapper(),
+                applicationId);
+    }
 
-                String sql = """
-                                UPDATE containers
-                                SET status = ?
-                                WHERE id = ?
-                                """;
+    public int updateStatus(Long id, String status) {
 
-                return jdbcTemplate.update(sql, status, id);
-        }
+        String sql = """
+                UPDATE containers
+                SET status = ?
+                WHERE id = ?
+                """;
 
-        public int markStarted(Long id, Timestamp startedAt) {
+        return jdbcTemplate.update(sql, status, id);
+    }
 
-                String sql = """
-                                UPDATE containers
-                                SET status = 'RUNNING',
-                                    started_at = ?
-                                WHERE id = ?
-                                """;
+    public int markStarted(Long id, Timestamp startedAt) {
 
-                return jdbcTemplate.update(
-                                sql,
-                                startedAt,
-                                id);
-        }
+        String sql = """
+                UPDATE containers
+                SET status = 'RUNNING',
+                    started_at = ?
+                WHERE id = ?
+                """;
 
-        public int markStopped(Long id, Timestamp stoppedAt) {
+        return jdbcTemplate.update(
+                sql,
+                startedAt,
+                id);
+    }
 
-                String sql = """
-                                UPDATE containers
-                                SET status = 'STOPPED',
-                                    stopped_at = ?
-                                WHERE id = ?
-                                """;
+    public int markStopped(Long id, Timestamp stoppedAt) {
 
-                return jdbcTemplate.update(
-                                sql,
-                                stoppedAt,
-                                id);
-        }
+        String sql = """
+                UPDATE containers
+                SET status = 'STOPPED',
+                    stopped_at = ?
+                WHERE id = ?
+                """;
 
-        public int markCrashed(Long id) {
+        return jdbcTemplate.update(
+                sql,
+                stoppedAt,
+                id);
+    }
 
-                String sql = """
-                                UPDATE containers
-                                SET status = 'CRASHED'
-                                WHERE id = ?
-                                """;
+    public int markCrashed(Long id) {
 
-                return jdbcTemplate.update(sql, id);
-        }
+        String sql = """
+                UPDATE containers
+                SET status = 'CRASHED'
+                WHERE id = ?
+                """;
 
-        public int deleteContainer(Long id) {
+        return jdbcTemplate.update(sql, id);
+    }
 
-                String sql = """
-                                DELETE FROM containers
-                                WHERE id = ?
-                                """;
+    public int deleteContainer(Long id) {
 
-                return jdbcTemplate.update(sql, id);
-        }
+        String sql = """
+                DELETE FROM containers
+                WHERE id = ?
+                """;
+
+        return jdbcTemplate.update(sql, id);
+    }
 }

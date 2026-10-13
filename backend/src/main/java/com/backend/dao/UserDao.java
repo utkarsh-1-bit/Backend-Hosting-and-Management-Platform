@@ -1,7 +1,11 @@
 package com.backend.dao;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+
+import java.sql.PreparedStatement;
 import java.util.List;
 
 import com.backend.model.User;
@@ -17,17 +21,26 @@ public class UserDao {
     }
 
     // 1 create user
-    public int createUser(User user) {
+    public Long createUser(User user) {
         String sql = """
                 INSERT INTO users (name, email, password)
                 VALUES (?, ?, ?)
                 """;
 
-        return jdbcTemplate.update(
-                sql,
-                user.getName(),
-                user.getEmail(),
-                user.getPassword());
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    sql,
+                    new String[] { "id" });
+            ps.setString(1, user.getName());
+            ps.setString(2, user.getEmail());
+            ps.setString(3, user.getPassword());
+            return ps;
+        }, keyHolder);
+
+        // Return the generated primary key as a Long
+        return keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
     }
 
     // 2. Find by email

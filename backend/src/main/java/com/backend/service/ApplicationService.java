@@ -2,9 +2,10 @@ package com.backend.service;
 
 import com.backend.dao.ApplicationDao;
 import com.backend.exception.DuplicateResourceException;
-import com.backend.exception.InvalidStateTransitionException;
 import com.backend.exception.ResourceNotFoundException;
 import com.backend.model.Application;
+import com.backend.model.Container;
+import com.backend.model.WorkloadJob;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,60 +14,54 @@ import java.util.List;
 public class ApplicationService {
 
     private final ApplicationDao applicationDao;
+    private final WorkloadJobService jobService;
+    private final ContainerService containerService;
 
-    public ApplicationService(ApplicationDao applicationDao) {
+    public ApplicationService(
+            ApplicationDao applicationDao,
+            WorkloadJobService jobService,
+            ContainerService containerService) {
+
         this.applicationDao = applicationDao;
+        this.jobService = jobService;
+        this.containerService = containerService;
     }
 
-    public Application createApplication(Application application) {
+    public Application createApplication(
+            Application application) {
 
-        if (application == null) {
-            throw new IllegalArgumentException("Application cannot be null");
+        if (application == null ||
+                application.getUserId() == null ||
+                application.getName() == null ||
+                application.getName().isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Invalid application data");
         }
 
-        if (application.getUserId() == null) {
-            throw new IllegalArgumentException("User ID is required");
-        }
-
-        if (application.getName() == null || application.getName().isBlank()) {
-            throw new IllegalArgumentException("Application name is required");
-        }
-
-        if (application.getRepositoryUrl() == null ||
-                application.getRepositoryUrl().isBlank()) {
-            throw new IllegalArgumentException("Repository URL is required");
-        }
-
-        if (application.getBranch() == null ||
-                application.getBranch().isBlank()) {
-            throw new IllegalArgumentException("Branch is required");
-        }
-
-        boolean exists = applicationDao.existsByNameForUser(
+        if (applicationDao.existsByNameForUser(
                 application.getUserId(),
-                application.getName());
+                application.getName())) {
 
-        if (exists) {
             throw new DuplicateResourceException(
-                    "Application with this name already exists for the user");
+                    "Application name already exists");
         }
 
-        Long applicationId = applicationDao.createApplication(application);
+        application.setStatus("CREATED");
 
-        return findById(applicationId);
+        Long id = applicationDao.createApplication(
+                application);
+
+        return findById(id);
     }
 
     public Application findById(Long id) {
-
-        if (id == null) {
-            throw new IllegalArgumentException("Application ID is required");
-        }
 
         Application application = applicationDao.findById(id);
 
         if (application == null) {
             throw new ResourceNotFoundException(
-                    "Application not found with id: " + id);
+                    "Application not found");
         }
 
         return application;
@@ -74,104 +69,112 @@ public class ApplicationService {
 
     public List<Application> findByUserId(Long userId) {
 
-        if (userId == null) {
-            throw new IllegalArgumentException("User ID is required");
-        }
-
         return applicationDao.findByUserId(userId);
     }
 
-    public List<Application> findAll() {
-        return applicationDao.findAll();
-    }
-
-    public int updateApplication(Application application) {
-
-        if (application == null) {
-            throw new IllegalArgumentException("Application cannot be null");
-        }
-
-        if (application.getId() == null) {
-            throw new IllegalArgumentException("Application ID is required");
-        }
-
-        if (application.getName() == null || application.getName().isBlank()) {
-            throw new IllegalArgumentException("Application name is required");
-        }
-
-        if (application.getRepositoryUrl() == null ||
-                application.getRepositoryUrl().isBlank()) {
-            throw new IllegalArgumentException("Repository URL is required");
-        }
-
-        if (application.getBranch() == null ||
-                application.getBranch().isBlank()) {
-            throw new IllegalArgumentException("Branch is required");
-        }
+    public Application updateApplication(
+            Application application) {
 
         findById(application.getId());
 
-        return applicationDao.updateApplication(application);
+        applicationDao.updateApplication(
+                application);
+
+        return findById(application.getId());
     }
 
-    public int updateStatus(Long id, String newStatus) {
-
-        if (id == null) {
-            throw new IllegalArgumentException("Application ID is required");
-        }
-
-        if (newStatus == null || newStatus.isBlank()) {
-            throw new IllegalArgumentException("Application status is required");
-        }
-
-        Application application = findById(id);
-
-        String currentStatus = application.getStatus();
-
-        if (!isValidStatusTransition(currentStatus, newStatus)) {
-            throw new InvalidStateTransitionException(
-                    "Invalid application state transition: "
-                            + currentStatus + " -> " + newStatus);
-        }
-
-        return applicationDao.updateStatus(id, newStatus);
-    }
-
-    public int deleteApplication(Long id) {
-
-        if (id == null) {
-            throw new IllegalArgumentException("Application ID is required");
-        }
+    public void deleteApplication(Long id) {
 
         findById(id);
 
-        return applicationDao.deleteApplication(id);
+        applicationDao.deleteApplication(id);
     }
 
-    private boolean isValidStatusTransition(
-            String currentStatus,
+    public void updateStatus(
+            Long id,
             String newStatus) {
 
-        return switch (currentStatus) {
+        Application application = findById(id);
 
-            case "CREATED" ->
-                newStatus.equals("READY");
+        String current = application.getStatus();
 
-            case "READY" ->
-                newStatus.equals("DEPLOYING");
+        boolean valid = ("CREATED".equals(current) &&
+                "READY".equals(newStatus)) ||
 
-            case "DEPLOYING" ->
-                newStatus.equals("RUNNING");
+                ("READY".equals(current) &&
+                        "DEPLOYING".equals(newStatus))
+                ||
 
-            case "RUNNING" ->
-                newStatus.equals("STOPPED");
+                ("DEPLOYING".equals(current) &&
+                        ("RUNNING".equals(newStatus) ||
+                                "READY".equals(newStatus)))
+                ||
 
-            case "STOPPED" ->
-                false;
+                ("RUNNING".equals(current) &&
+                        "STOPPED".equals(newStatus));
 
-            default ->
-                false;
-        };
+        if (!valid) {
+            throw new IllegalStateException(
+                    "Invalid application status change");
+        }
+
+        applicationDao.updateStatus(
+                id,
+                newStatus);
     }
 
+    public WorkloadJob startApplication(Long id) {
+
+        Application application = findById(id);
+
+        if (!"READY".equals(application.getStatus())) {
+            throw new IllegalStateException(
+                    "Application is not ready");
+        }
+
+        WorkloadJob job = new WorkloadJob();
+
+        job.setApplicationId(id);
+        job.setJobType("DEPLOY");
+        job.setPriority(1);
+        job.setBurstTime(10);
+
+        return jobService.createJob(job);
+    }
+
+    public void stopApplication(Long id) {
+
+        Application application = findById(id);
+
+        if (!"RUNNING".equals(application.getStatus())) {
+            throw new IllegalStateException(
+                    "Application is not running");
+        }
+
+        Container container = containerService.findRunningByApplicationId(id);
+
+        containerService.stopContainer(
+                container.getId());
+
+        updateStatus(id, "STOPPED");
+    }
+
+    public WorkloadJob restartApplication(Long id) {
+
+        Application application = findById(id);
+
+        if (!"STOPPED".equals(application.getStatus())) {
+            throw new IllegalStateException(
+                    "Application is not stopped");
+        }
+
+        WorkloadJob job = new WorkloadJob();
+
+        job.setApplicationId(id);
+        job.setJobType("RESTART");
+        job.setPriority(1);
+        job.setBurstTime(5);
+
+        return jobService.createJob(job);
+    }
 }

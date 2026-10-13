@@ -11,63 +11,72 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-        @ExceptionHandler(ResourceNotFoundException.class)
-        public ResponseEntity<Map<String, Object>> handleResourceNotFound(
-                        ResourceNotFoundException exception) {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleResourceNotFound(
+            ResourceNotFoundException exception) {
 
-                Map<String, Object> body = Map.of(
-                                "timestamp", LocalDateTime.now(),
-                                "status", HttpStatus.NOT_FOUND.value(),
-                                "error", "Not Found",
-                                "message", exception.getMessage());
+        Map<String, Object> body = Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", HttpStatus.NOT_FOUND.value(),
+                "error", "Not Found",
+                "message", exception.getMessage());
 
-                return ResponseEntity
-                                .status(HttpStatus.NOT_FOUND)
-                                .body(body);
-        }
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(body);
+    }
 
-        @ExceptionHandler(IllegalArgumentException.class)
-        public ResponseEntity<Map<String, Object>> handleIllegalArgument(
-                        IllegalArgumentException exception) {
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException exception) {
 
-                Map<String, Object> body = Map.of(
-                                "timestamp", LocalDateTime.now(),
-                                "status", HttpStatus.BAD_REQUEST.value(),
-                                "error", "Bad Request",
-                                "message", exception.getMessage());
+        Map<String, Object> body = Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", HttpStatus.BAD_REQUEST.value(),
+                "error", "Bad Request",
+                "message", exception.getMessage());
 
-                return ResponseEntity
-                                .status(HttpStatus.BAD_REQUEST)
-                                .body(body);
-        }
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(body);
+    }
 
-        @ExceptionHandler(InvalidStateTransitionException.class)
-        public ResponseEntity<Map<String, Object>> handleInvalidStateTransition(
-                        InvalidStateTransitionException exception) {
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidStateTransition(
+            InvalidStateTransitionException exception) {
 
-                Map<String, Object> body = Map.of(
-                                "timestamp", LocalDateTime.now(),
-                                "status", HttpStatus.CONFLICT.value(),
-                                "error", "Conflict",
-                                "message", exception.getMessage());
+        Map<String, Object> body = Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", HttpStatus.CONFLICT.value(),
+                "error", "Conflict",
+                "message", exception.getMessage());
 
-                return ResponseEntity
-                                .status(HttpStatus.CONFLICT)
-                                .body(body);
-        }
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(body);
+    }
 
-        @ExceptionHandler(DuplicateResourceException.class)
-        public ResponseEntity<Map<String, Object>> handleDuplicateResourceException(
-                        InvalidStateTransitionException exception) {
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateResourceException(
+            InvalidStateTransitionException exception) {
 
-                Map<String, Object> body = Map.of(
-                                "timestamp", LocalDateTime.now(),
-                                "status", HttpStatus.CONFLICT.value(),
-                                "error", "Conflict",
-                                "message", exception.getMessage());
+        Map<String, Object> body = Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", HttpStatus.CONFLICT.value(),
+                "error", "Conflict",
+                "message", exception.getMessage());
 
-                return ResponseEntity
-                                .status(HttpStatus.CONFLICT)
-                                .body(body);
-        }
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(body);
+    }
+
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ResponseEntity<String> handleAuthenticationFailed(
+            AuthenticationFailedException e) {
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(e.getMessage());
+    }
 }

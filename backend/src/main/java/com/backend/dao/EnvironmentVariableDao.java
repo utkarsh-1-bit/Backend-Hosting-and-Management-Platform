@@ -3,8 +3,11 @@ package com.backend.dao;
 import com.backend.dao.mapper.EnvironmentVariableRowMapper;
 import com.backend.model.EnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.util.List;
 
 @Repository
@@ -16,20 +19,27 @@ public class EnvironmentVariableDao {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public int createVariable(
-            EnvironmentVariable variable) {
-
+    public Long createVariable(EnvironmentVariable variable) {
         String sql = """
                 INSERT INTO environment_variables
                 (application_id, variable_key, variable_value)
                 VALUES (?, ?, ?)
                 """;
 
-        return jdbcTemplate.update(
-                sql,
-                variable.getApplicationId(),
-                variable.getVariableKey(),
-                variable.getVariableValue());
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    sql,
+                    new String[] { "id" });
+            ps.setLong(1, variable.getApplicationId()); // Adjust to setInt if your application ID is an int
+            ps.setString(2, variable.getVariableKey());
+            ps.setString(3, variable.getVariableValue());
+            return ps;
+        }, keyHolder);
+
+        // Return the generated primary key as a Long
+        return keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
     }
 
     public EnvironmentVariable findById(Long id) {
