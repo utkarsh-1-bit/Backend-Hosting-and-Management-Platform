@@ -23,7 +23,7 @@ The project combines concepts from Operating Systems, DBMS, Computer Networks, a
 * Persistent Storage: Store user accounts, application metadata, workload jobs, container information, and environment variables in MySQL.
 * REST API: Connect the frontend and backend through HTTP-based REST endpoints.
 
-🏗️ System Architecture
+🏗️ Architecture
 
 The platform follows a layered architecture in which each component is responsible for a specific part of the application lifecycle.
 
