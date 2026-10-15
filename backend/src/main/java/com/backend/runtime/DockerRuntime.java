@@ -22,6 +22,11 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
+    public void removeImage(String imageName) {
+        executeCommand("docker", "rmi", imageName);
+    }
+
+    @Override
     public String createContainer(
             String imageName,
             int hostPort,
@@ -37,8 +42,7 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
-    public void startContainer(
-            String containerId) {
+    public void startContainer(String containerId) {
 
         executeCommand(
                 "docker",
@@ -47,8 +51,7 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
-    public void stopContainer(
-            String containerId) {
+    public void stopContainer(String containerId) {
 
         executeCommand(
                 "docker",
@@ -57,8 +60,7 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
-    public void removeContainer(
-            String containerId) {
+    public void removeContainer(String containerId) {
 
         executeCommand(
                 "docker",
@@ -67,8 +69,7 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
-    public String getContainerStatus(
-            String containerId) {
+    public String getContainerStatus(String containerId) {
 
         return executeCommand(
                 "docker",
@@ -79,8 +80,7 @@ public class DockerRuntime implements Runtime {
     }
 
     @Override
-    public String getLogs(
-            String containerId) {
+    public String getLogs(String containerId) {
 
         return executeCommand(
                 "docker",
@@ -88,8 +88,7 @@ public class DockerRuntime implements Runtime {
                 containerId);
     }
 
-    private String executeCommand(
-            String... command) {
+    private String executeCommand(String... command) {
 
         try {
 

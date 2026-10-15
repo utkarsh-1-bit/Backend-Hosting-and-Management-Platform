@@ -5,23 +5,21 @@ public interface Runtime {
             String sourceDirectory,
             String imageName);
 
+    void removeImage(String imageName);
+
     String createContainer(
             String imageName,
             int hostPort,
             int containerPort);
 
-    void startContainer(
-            String containerId);
+    void startContainer(String containerId);
 
-    void stopContainer(
-            String containerId);
+    void stopContainer(String containerId);
 
-    void removeContainer(
-            String containerId);
+    void removeContainer(String containerId);
 
-    String getContainerStatus(
-            String containerId);
+    String getContainerStatus(String containerId);
 
-    String getLogs(
-            String containerId);
+    String getLogs(String containerId);
+
 }

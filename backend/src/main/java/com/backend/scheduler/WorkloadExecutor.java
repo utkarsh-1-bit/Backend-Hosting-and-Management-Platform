@@ -1,11 +1,18 @@
-package com.backend.service;
+package com.backend.scheduler;
 
 import com.backend.git.GitService;
 import com.backend.model.Application;
 import com.backend.model.Container;
 import com.backend.model.WorkloadJob;
 import com.backend.runtime.Runtime;
+import com.backend.service.ApplicationService;
+import com.backend.service.ContainerService;
+import com.backend.service.WorkloadJobService;
+
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.net.ServerSocket;
 
 import java.sql.Timestamp;
 
@@ -52,6 +59,7 @@ public class WorkloadExecutor {
 
             jobService.startJob(job.getId());
 
+            // clone repo
             String path = gitService.cloneRepository(
                     app.getRepositoryUrl(),
                     app.getBranch());
@@ -62,12 +70,12 @@ public class WorkloadExecutor {
                     path,
                     imageName);
 
-            int hostPort = 8000 + app.getId().intValue();
+            int hostPort = findAvailablePort();
 
             String dockerId = runtime.createContainer(
                     imageName,
                     hostPort,
-                    8080);
+                    5000);
 
             runtime.startContainer(dockerId);
 
@@ -100,7 +108,6 @@ public class WorkloadExecutor {
 
             jobService.failJob(job.getId());
 
-            throw e;
         }
     }
 
@@ -129,6 +136,13 @@ public class WorkloadExecutor {
             jobService.failJob(job.getId());
 
             throw e;
+        }
+    }
+
+    private int findAvailablePort() throws IOException {
+
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
         }
     }
 }

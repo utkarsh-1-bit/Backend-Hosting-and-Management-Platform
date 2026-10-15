@@ -6,7 +6,6 @@ import com.backend.scheduler.strategy.FcfsSchedulingStrategy;
 import com.backend.scheduler.strategy.PrioritySchedulingStrategy;
 import com.backend.scheduler.strategy.SchedulingStrategy;
 import com.backend.scheduler.strategy.SjfSchedulingStrategy;
-import com.backend.service.WorkloadExecutor;
 import com.backend.service.WorkloadJobService;
 
 import org.springframework.beans.factory.annotation.Value;

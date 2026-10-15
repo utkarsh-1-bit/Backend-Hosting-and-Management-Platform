@@ -1,18 +1,15 @@
 package com.backend.scheduler.strategy;
 
 import com.backend.model.WorkloadJob;
-
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
-public class FcfsSchedulingStrategy
-        implements SchedulingStrategy {
+public class FcfsSchedulingStrategy implements SchedulingStrategy {
 
     @Override
-    public WorkloadJob selectNextJob(
-            List<WorkloadJob> jobs) {
+    public WorkloadJob selectNextJob(List<WorkloadJob> jobs) {
 
         if (jobs == null || jobs.isEmpty()) {
             return null;
@@ -20,12 +17,14 @@ public class FcfsSchedulingStrategy
 
         WorkloadJob selectedJob = jobs.get(0);
 
-        for (WorkloadJob job : jobs) {
+        for (int i = 1; i < jobs.size(); i++) {
 
-            if (job.getArrivalTime().before(
+            WorkloadJob currentJob = jobs.get(i);
+
+            if (currentJob.getArrivalTime().before(
                     selectedJob.getArrivalTime())) {
 
-                selectedJob = job;
+                selectedJob = currentJob;
             }
         }
 

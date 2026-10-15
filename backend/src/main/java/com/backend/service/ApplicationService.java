@@ -1,13 +1,17 @@
 package com.backend.service;
 
+import com.backend.controller.dto.ApplicationResponse;
 import com.backend.dao.ApplicationDao;
-import com.backend.exception.DuplicateResourceException;
-import com.backend.exception.ResourceNotFoundException;
+import com.backend.runtime.Runtime;
 import com.backend.model.Application;
 import com.backend.model.Container;
+import com.backend.model.EnvironmentVariable;
 import com.backend.model.WorkloadJob;
-import org.springframework.stereotype.Service;
 
+import com.backend.exception.DuplicateResourceException;
+import com.backend.exception.ResourceNotFoundException;
+
+import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
@@ -16,15 +20,21 @@ public class ApplicationService {
     private final ApplicationDao applicationDao;
     private final WorkloadJobService jobService;
     private final ContainerService containerService;
+    private final EnvironmentVariableService variableService;
+    private final Runtime runtime;
 
     public ApplicationService(
             ApplicationDao applicationDao,
             WorkloadJobService jobService,
-            ContainerService containerService) {
+            ContainerService containerService,
+            EnvironmentVariableService variableService,
+            Runtime runtime) {
 
         this.applicationDao = applicationDao;
         this.jobService = jobService;
         this.containerService = containerService;
+        this.variableService = variableService;
+        this.runtime = runtime;
     }
 
     public Application createApplication(
@@ -53,6 +63,27 @@ public class ApplicationService {
                 application);
 
         return findById(id);
+    }
+
+    public ApplicationResponse getApplication(Long id) {
+        Application application = findById(id);
+
+        ApplicationResponse response = new ApplicationResponse();
+
+        response.setId(application.getId());
+        response.setName(application.getName());
+        response.setStatus(application.getStatus());
+
+        if ("RUNNING".equals(application.getStatus())) {
+
+            Container container = containerService.findRunningByApplicationId(id);
+
+            if (container != null && container.getHostPort() != null) {
+                response.setUrl("http://localhost:" + container.getHostPort());
+            }
+        }
+
+        return response;
     }
 
     public Application findById(Long id) {
@@ -85,8 +116,43 @@ public class ApplicationService {
 
     public void deleteApplication(Long id) {
 
-        findById(id);
+        Application application = findById(id);
 
+        if ("DEPLOYING".equals(application.getStatus())) {
+            throw new IllegalStateException(
+                    "Cannot delete an application while deploying");
+        }
+
+        // remove containers
+        List<Container> containers = containerService.findByApplicationId(id);
+
+        for (Container container : containers) {
+
+            if ("RUNNING".equals(container.getStatus())) {
+                containerService.stopContainer(container.getId());
+            }
+
+            containerService.removeContainer(container.getId());
+        }
+
+        // Delete environment variables
+        List<EnvironmentVariable> variables = variableService.findByApplicationId(id);
+
+        for (EnvironmentVariable variable : variables) {
+            variableService.deleteById(variable.getId());
+        }
+
+        // Delete workload jobs
+        List<WorkloadJob> jobs = jobService.findByApplicationId(id);
+
+        for (WorkloadJob job : jobs) {
+            jobService.deleteJob(job.getId());
+        }
+
+        // Remove application image
+        runtime.removeImage("mini-render-app-" + id);
+
+        // Delete the application record
         applicationDao.deleteApplication(id);
     }
 

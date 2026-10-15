@@ -1,5 +1,6 @@
 package com.backend.controller;
 
+import com.backend.controller.dto.ApplicationResponse;
 import com.backend.model.Application;
 import com.backend.service.ApplicationService;
 import org.springframework.web.bind.annotation.*;
@@ -27,10 +28,10 @@ public class ApplicationController {
     }
 
     @GetMapping("/{id}")
-    public Application getById(
+    public ApplicationResponse getById(
             @PathVariable Long id) {
 
-        return applicationService.findById(id);
+        return applicationService.getApplication(id);
     }
 
     @GetMapping("/user/{userId}")
