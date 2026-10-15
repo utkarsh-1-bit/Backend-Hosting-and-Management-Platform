@@ -1,51 +1,90 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { appApi } from '../services/api';
 import { mockData } from '../services/mockData';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   Box, Server, CalendarClock, Container,
-  ArrowUpRight, ArrowDownRight, TrendingUp,
+  GitBranch, Clock, ArrowRight, RefreshCw, CheckCircle2, AlertCircle, PlayCircle
 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [apps, setApps] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    async function load() {
+  const loadData = async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const userId = user?.id || 1;
+      let userApps = [];
+
       try {
-        const [s, a, j, m] = await Promise.all([
-          mockData.getDashboardStats(),
-          mockData.getApplications(),
-          mockData.getJobs(),
-          mockData.getApplicationMetrics(),
-        ]);
-        setStats(s);
-        setApps(a);
-        setJobs(j.slice(0, 5));
-        setMetrics(m);
-      } finally {
-        setLoading(false);
+        const res = await appApi.getByUser(userId);
+        if (Array.isArray(res)) userApps = res;
+      } catch (err) {
+        console.warn('Backend unavailable, using mock data for dashboard:', err.message);
       }
+
+      if (userApps.length === 0) {
+        userApps = await mockData.getApplications();
+      }
+
+      const [j, m] = await Promise.all([
+        mockData.getJobs(),
+        mockData.getApplicationMetrics(),
+      ]);
+
+      const running = userApps.filter((a) => a.status === 'RUNNING').length;
+      const total = userApps.length;
+      const activeJobs = j.filter((job) => ['QUEUED', 'SCHEDULED', 'RUNNING'].includes(job.status)).length;
+      const runningContainers = running;
+
+      setStats({
+        totalApps: total,
+        runningApps: running,
+        activeJobs,
+        runningContainers,
+      });
+
+      setApps(userApps);
+      setJobs(j.slice(0, 5));
+      setMetrics(m);
+    } catch (err) {
+      console.error('Failed to load dashboard metrics', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    load();
-  }, []);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [user?.id]);
 
   if (loading) {
-    return <div className="loading-page"><div className="spinner spinner-lg" /></div>;
+    return (
+      <div className="loading-page">
+        <div className="spinner spinner-lg" />
+      </div>
+    );
   }
 
   const statCards = [
-    { label: 'Total Applications', value: stats?.totalApps || 0, icon: Box, color: 'blue', change: '+2', dir: 'up' },
-    { label: 'Running', value: stats?.runningApps || 0, icon: Server, color: 'green', change: '+1', dir: 'up' },
-    { label: 'Active Jobs', value: stats?.activeJobs || 0, icon: CalendarClock, color: 'yellow', change: '3', dir: 'up' },
-    { label: 'Containers', value: stats?.runningContainers || 0, icon: Container, color: 'purple', change: '0', dir: 'up' },
+    { label: 'Total Applications', value: stats?.totalApps || 0, icon: Box, color: 'blue' },
+    { label: 'Running Services', value: stats?.runningApps || 0, icon: Server, color: 'green' },
+    { label: 'Active Workload Jobs', value: stats?.activeJobs || 0, icon: CalendarClock, color: 'yellow' },
+    { label: 'Container Instances', value: stats?.runningContainers || 0, icon: Container, color: 'purple' },
   ];
 
   const formatTime = (ts) => {
@@ -73,140 +112,188 @@ export default function DashboardPage() {
         <div className="page-header-top">
           <div>
             <h1 className="page-title">Dashboard</h1>
-            <p className="page-subtitle">Overview of your hosted applications and workloads</p>
+            <p className="page-subtitle">Platform overview of workloads, containers, and application health</p>
           </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            title="Refresh dashboard stats"
+          >
+            <RefreshCw size={14} className={refreshing ? 'spinning' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
       </div>
 
       <div className="stats-grid">
-        {statCards.map(({ label, value, icon: Icon, color, change, dir }) => (
-          <div className="stat-card" key={label}>
-            <div className="stat-card-top">
+        {statCards.map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="stat-card">
+            <div className="stat-card-header">
+              <span className="stat-card-label">{label}</span>
               <div className={`stat-card-icon ${color}`}>
-                <Icon />
+                <Icon size={18} />
               </div>
-              <span className={`stat-card-change ${dir}`}>
-                {dir === 'up' ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                {change}
-              </span>
             </div>
             <div className="stat-card-value">{value}</div>
-            <div className="stat-card-label">{label}</div>
           </div>
         ))}
       </div>
 
-      <div className="content-grid" style={{ marginBottom: 24 }}>
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">CPU Usage (%)</span>
-            <TrendingUp size={16} style={{ color: 'var(--text-tertiary)' }} />
-          </div>
-          <div className="card-body">
-            <div className="chart-container">
+      {metrics && (
+        <div className="content-grid" style={{ marginBottom: 24 }}>
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <span className="card-title">Cluster CPU Utilization</span>
+                <p className="card-subtitle">Aggregate across all hosted workload containers</p>
+              </div>
+            </div>
+            <div className="card-body" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={metrics?.cpuUsage || []}>
-                  <defs>
-                    <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="time" tick={{ fill: '#5c6478', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#5c6478', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                <AreaChart data={metrics.cpuUsage}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                  <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
+                  <YAxis stroke="var(--text-tertiary)" fontSize={11} unit="%" domain={[0, 100]} />
                   <Tooltip contentStyle={chartTooltipStyle} />
-                  <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} fill="url(#cpuGrad)" />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="var(--accent-primary)"
+                    fill="var(--accent-primary-muted)"
+                    name="CPU %"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
 
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Memory Usage (MB)</span>
-            <TrendingUp size={16} style={{ color: 'var(--text-tertiary)' }} />
-          </div>
-          <div className="card-body">
-            <div className="chart-container">
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <span className="card-title">Inbound Network Requests</span>
+                <p className="card-subtitle">Requests per minute routed via gateway</p>
+              </div>
+            </div>
+            <div className="card-body" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={metrics?.memoryUsage || []}>
-                  <defs>
-                    <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="time" tick={{ fill: '#5c6478', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#5c6478', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <AreaChart data={metrics.requestCount}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                  <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
+                  <YAxis stroke="var(--text-tertiary)" fontSize={11} />
                   <Tooltip contentStyle={chartTooltipStyle} />
-                  <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fill="url(#memGrad)" />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="var(--success)"
+                    fill="var(--success-muted)"
+                    name="Req/min"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="content-grid">
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-title">Recent Applications</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/applications')}>View all</button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate('/applications')}
+              style={{ fontSize: '0.8rem' }}
+            >
+              View all <ArrowRight size={13} style={{ marginLeft: 4 }} />
+            </button>
           </div>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {apps.slice(0, 5).map(app => (
-                  <tr key={app.id} onClick={() => navigate(`/applications/${app.id}`)} style={{ cursor: 'pointer' }}>
-                    <td className="cell-primary">{app.name}</td>
-                    <td>
-                      <span className={`status-badge ${app.status.toLowerCase()}`}>{app.status}</span>
-                    </td>
-                    <td>{formatTime(app.updatedAt)}</td>
+          {apps.length === 0 ? (
+            <div className="card-body" style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No applications deployed yet</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Application</th>
+                    <th>Status</th>
+                    <th>Repository</th>
+                    <th>Created</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {apps.slice(0, 5).map((app) => (
+                    <tr
+                      key={app.id}
+                      onClick={() => navigate(`/applications/${app.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td style={{ fontWeight: 600 }}>{app.name}</td>
+                      <td>
+                        <span className={`status-badge ${(app.status || 'CREATED').toLowerCase()}`}>
+                          {app.status || 'CREATED'}
+                        </span>
+                      </td>
+                      <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <GitBranch size={12} />
+                          {app.repositoryUrl ? app.repositoryUrl.replace('https://github.com/', '') : 'repo'}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-tertiary)' }}>{formatTime(app.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="card">
-          <div className="card-header">
-            <span className="card-title">Recent Jobs</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/jobs')}>View all</button>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="card-title">Workload Scheduler Queue</span>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate('/jobs')}
+              style={{ fontSize: '0.8rem' }}
+            >
+              Manage jobs <ArrowRight size={13} style={{ marginLeft: 4 }} />
+            </button>
           </div>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map(job => (
-                  <tr key={job.id}>
-                    <td className="cell-primary">{job.jobType}</td>
-                    <td>
-                      <span className={`status-badge ${job.status.toLowerCase()}`}>{job.status}</span>
-                    </td>
-                    <td>{job.priority}</td>
+          {jobs.length === 0 ? (
+            <div className="card-body" style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No recent workload jobs</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Job ID</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Priority</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {jobs.map((job) => (
+                    <tr key={job.id}>
+                      <td className="cell-mono">#{job.id}</td>
+                      <td style={{ fontWeight: 500 }}>{job.jobType}</td>
+                      <td>
+                        <span className={`status-badge ${(job.status || 'QUEUED').toLowerCase()}`}>
+                          {job.status || 'QUEUED'}
+                        </span>
+                      </td>
+                      <td className="cell-mono">P{job.priority || 1}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </>
