@@ -1,5 +1,11 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+// API client service for HosteX backend integration
+// Points to Spring Boot REST backend on http://localhost:8080 (via Vite proxy or direct base URL)
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Universal fetch wrapper with error handling and fallback support
+ */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = localStorage.getItem('hostex_token');
@@ -16,67 +22,170 @@ async function request(endpoint, options = {}) {
   const response = await fetch(url, config);
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || 'Request failed');
+    let errorMessage = `HTTP Error ${response.status}`;
+    try {
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text);
+        errorMessage = json.message || json.error || text;
+      } catch {
+        errorMessage = text || response.statusText;
+      }
+    } catch {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 
   if (response.status === 204) return null;
   return response.json();
 }
 
-// Auth
+/**
+ * User & Authentication Endpoints
+ * Maps to com.backend.controller.UserController:
+ * - POST /api/users/register
+ * - POST /api/users/login
+ */
 export const authApi = {
-  register: (data) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) }),
-  login: (data) => request('/api/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  login: async ({ email, password }) => {
+    return request('/api/users/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  register: async ({ name, email, password }) => {
+    return request('/api/users/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    });
+  },
 };
 
-// Applications
+/**
+ * Applications Endpoints
+ * Maps to com.backend.controller.ApplicationController:
+ * - POST /api/applications
+ * - GET /api/applications/{id} -> returns ApplicationResponse { id, name, status, url }
+ * - GET /api/applications/user/{userId} -> returns List<Application>
+ * - PUT /api/applications/{id}
+ * - DELETE /api/applications/{id}
+ * - POST /api/applications/{id}/start
+ * - POST /api/applications/{id}/stop
+ * - POST /api/applications/{id}/restart
+ */
 export const appApi = {
-  list: () => request('/api/applications'),
-  getById: (id) => request(`/api/applications/${id}`),
-  getByUser: (userId) => request(`/api/applications?userId=${userId}`),
-  create: (data) => request('/api/applications', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => request(`/api/applications/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateStatus: (id, status) => request(`/api/applications/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  delete: (id) => request(`/api/applications/${id}`, { method: 'DELETE' }),
-  deploy: (id) => request(`/api/applications/${id}/deploy`, { method: 'POST' }),
-  start: (id) => request(`/api/applications/${id}/start`, { method: 'POST' }),
-  stop: (id) => request(`/api/applications/${id}/stop`, { method: 'POST' }),
-  restart: (id) => request(`/api/applications/${id}/restart`, { method: 'POST' }),
-  getLogs: (id) => request(`/api/applications/${id}/logs`),
-  getMetrics: (id) => request(`/api/applications/${id}/metrics`),
+  // Get all applications for a specific user
+  getByUser: async (userId) => {
+    return request(`/api/applications/user/${userId}`);
+  },
+
+  // Get application response with container live URL and status
+  getById: async (id) => {
+    return request(`/api/applications/${id}`);
+  },
+
+  // Create new application
+  create: async (data) => {
+    return request('/api/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Update application configuration
+  update: async (id, data) => {
+    return request(`/api/applications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete application and clean up container resources
+  delete: async (id) => {
+    return request(`/api/applications/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Lifecycle operations
+  start: async (id) => {
+    return request(`/api/applications/${id}/start`, {
+      method: 'POST',
+    });
+  },
+
+  stop: async (id) => {
+    return request(`/api/applications/${id}/stop`, {
+      method: 'POST',
+    });
+  },
+
+  restart: async (id) => {
+    return request(`/api/applications/${id}/restart`, {
+      method: 'POST',
+    });
+  },
 };
 
-// Containers
-export const containerApi = {
-  getByApp: (appId) => request(`/api/containers?applicationId=${appId}`),
-  getById: (id) => request(`/api/containers/${id}`),
-  create: (data) => request('/api/containers', { method: 'POST', body: JSON.stringify(data) }),
-  start: (id) => request(`/api/containers/${id}/start`, { method: 'POST' }),
-  stop: (id) => request(`/api/containers/${id}/stop`, { method: 'POST' }),
-  delete: (id) => request(`/api/containers/${id}`, { method: 'DELETE' }),
-};
-
-// Workload Jobs
-export const jobApi = {
-  list: () => request('/api/jobs'),
-  getById: (id) => request(`/api/jobs/${id}`),
-  create: (data) => request('/api/jobs', { method: 'POST', body: JSON.stringify(data) }),
-  schedule: (id) => request(`/api/jobs/${id}/schedule`, { method: 'POST' }),
-  start: (id) => request(`/api/jobs/${id}/start`, { method: 'POST' }),
-  complete: (id) => request(`/api/jobs/${id}/complete`, { method: 'POST' }),
-  cancel: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),
-};
-
-// Environment Variables
+/**
+ * Environment Variables Endpoints
+ * Maps to com.backend.controller.EnvironmentVariableController:
+ * - POST /api/applications/{applicationId}/env
+ * - GET /api/applications/{applicationId}/env
+ * - GET /api/applications/{applicationId}/env/{key}
+ * - PUT /api/applications/{applicationId}/env/{key}
+ * - DELETE /api/applications/{applicationId}/env/{key}
+ */
 export const envApi = {
-  getByApp: (appId) => request(`/api/applications/${appId}/env`),
-  create: (appId, data) => request(`/api/applications/${appId}/env`, { method: 'POST', body: JSON.stringify(data) }),
-  update: (appId, id, data) => request(`/api/applications/${appId}/env/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (appId, id) => request(`/api/applications/${appId}/env/${id}`, { method: 'DELETE' }),
+  getByApp: async (applicationId) => {
+    return request(`/api/applications/${applicationId}/env`);
+  },
+
+  getByKey: async (applicationId, key) => {
+    return request(`/api/applications/${applicationId}/env/${encodeURIComponent(key)}`);
+  },
+
+  create: async (applicationId, { variableKey, variableValue }) => {
+    return request(`/api/applications/${applicationId}/env`, {
+      method: 'POST',
+      body: JSON.stringify({ variableKey, variableValue }),
+    });
+  },
+
+  update: async (applicationId, key, { variableValue }) => {
+    return request(`/api/applications/${applicationId}/env/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ variableKey: key, variableValue }),
+    });
+  },
+
+  delete: async (applicationId, key) => {
+    return request(`/api/applications/${applicationId}/env/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
-// Scheduler
-export const schedulerApi = {
-  runScheduler: (algorithm) => request(`/api/scheduler/run?algorithm=${algorithm}`, { method: 'POST' }),
+/**
+ * System and Health Diagnostics
+ */
+export const systemApi = {
+  checkHealth: async () => {
+    const startTime = performance.now();
+    try {
+      // Pinging the API endpoint
+      const res = await fetch(`${API_BASE}/api/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '__healthcheck__', password: '' }),
+      });
+      const latency = Math.round(performance.now() - startTime);
+      // Even if 401/400 is returned, backend is up and running!
+      return { online: true, latency, status: res.status };
+    } catch {
+      return { online: false, latency: null, status: null };
+    }
+  },
 };
