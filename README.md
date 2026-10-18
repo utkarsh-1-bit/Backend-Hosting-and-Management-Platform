@@ -188,8 +188,6 @@ application_id	Associated application
 key	Configuration variable name
 value	Configuration value
 
-Note: These tables represent the proposed logical schema. Adjust field names and relationships to match the actual database implementation.
-
 ⚙️ CPU Scheduling Algorithms
 
 The platform incorporates CPU scheduling algorithms to demonstrate how workloads can be selected and ordered for execution.
@@ -391,12 +389,12 @@ Recommended testing areas include:
 
 👥 Contributors
 
-Add the project team members and their GitHub profiles here.
+Team members name and their GitHub profiles are here-
 
-* Utkarsh Shukla
-* Sarabjeet Singh
-* Maninder Kaur
-* Riddhi Jain
+* Utkarsh Shukla (utkarsh-1-bit)
+* Sarabjeet Singh (Shawn022)
+* Maninder Kaur (maninder1616)
+* Riddhi Jain (Riddhiijain-jain)
 
 📚 References
 
@@ -406,6 +404,3 @@ Add the project team members and their GitHub profiles here.
 * Docker Documentation
 * Spring REST Guide
 
-📄 License
-
-This project is developed for educational and academic purposes. Add a LICENSE file if you intend to distribute it under a specific open-source license.
