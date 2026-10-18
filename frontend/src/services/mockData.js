@@ -1,245 +1,374 @@
-// Mock data store to simulate backend responses for demonstration
-// Replace each function with real API calls when the backend is connected
+// HosteX Local State & Simulation Engine
+// Provides full persistence via localStorage and high-fidelity simulations
+// for build logs, metrics, container lifecycle, and CPU workload scheduling.
 
-const delay = (ms) => new Promise(res => setTimeout(res, ms));
+const STORAGE_KEYS = {
+  APPS: 'hostex_apps_v2',
+  JOBS: 'hostex_jobs_v2',
+  ENVS: 'hostex_envs_v2',
+  LOGS: 'hostex_logs_v2',
+};
 
-let applications = [
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+const INITIAL_APPS = [
   {
     id: 1,
     userId: 1,
-    name: 'payment-service',
-    repositoryUrl: 'https://github.com/acme/payment-service',
+    name: 'backend-hosting-platform',
+    repositoryUrl: 'https://github.com/utkarsh-1-bit/Backend-Hosting-and-Management-Platform',
     branch: 'main',
-    buildCommand: 'mvn clean install',
-    startCommand: 'java -jar target/app.jar',
+    type: 'web',
+    region: 'us-west-oregon',
+    buildCommand: 'mvn clean install -DskipTests',
+    startCommand: 'java -jar target/backend-0.0.1-SNAPSHOT.jar',
     status: 'RUNNING',
-    createdAt: '2026-09-15T10:30:00',
-    updatedAt: '2026-10-10T14:22:00',
+    port: 8080,
+    liveUrl: 'https://hostex-backend.hostex.dev',
+    createdAt: '2026-10-15T14:30:00Z',
+    updatedAt: '2026-10-18T21:18:39Z',
   },
   {
     id: 2,
     userId: 1,
-    name: 'user-auth-api',
-    repositoryUrl: 'https://github.com/acme/user-auth-api',
-    branch: 'develop',
-    buildCommand: 'npm run build',
-    startCommand: 'node dist/index.js',
+    name: 'user-auth-service',
+    repositoryUrl: 'https://github.com/expressjs/express-starter',
+    branch: 'main',
+    type: 'web',
+    region: 'eu-central-frankfurt',
+    buildCommand: 'npm install && npm run build',
+    startCommand: 'node dist/server.js',
     status: 'RUNNING',
-    createdAt: '2026-09-20T08:15:00',
-    updatedAt: '2026-10-11T09:45:00',
+    port: 3001,
+    liveUrl: 'https://auth-api.hostex.dev',
+    createdAt: '2026-10-16T09:15:00Z',
+    updatedAt: '2026-10-18T18:22:00Z',
   },
   {
     id: 3,
     userId: 1,
-    name: 'notification-worker',
-    repositoryUrl: 'https://github.com/acme/notification-worker',
+    name: 'image-optimizer-worker',
+    repositoryUrl: 'https://github.com/celery/celery-sample',
     branch: 'main',
-    buildCommand: 'go build -o app .',
-    startCommand: './app',
-    status: 'STOPPED',
-    createdAt: '2026-10-01T16:00:00',
-    updatedAt: '2026-10-08T11:30:00',
+    type: 'worker',
+    region: 'us-west-oregon',
+    buildCommand: 'pip install -r requirements.txt',
+    startCommand: 'celery -A tasks worker --loglevel=info',
+    status: 'RUNNING',
+    port: null,
+    liveUrl: null,
+    createdAt: '2026-10-17T11:45:00Z',
+    updatedAt: '2026-10-18T19:00:00Z',
   },
   {
     id: 4,
     userId: 1,
-    name: 'analytics-engine',
-    repositoryUrl: 'https://github.com/acme/analytics-engine',
+    name: 'analytics-dashboard-static',
+    repositoryUrl: 'https://github.com/vitejs/vite-react-starter',
     branch: 'release/v2',
-    buildCommand: 'pip install -r requirements.txt',
-    startCommand: 'python main.py',
-    status: 'DEPLOYING',
-    createdAt: '2026-10-05T12:00:00',
-    updatedAt: '2026-10-12T07:15:00',
+    type: 'static',
+    region: 'global-edge-cdn',
+    buildCommand: 'npm run build',
+    startCommand: 'serve -s dist -l 80',
+    status: 'STOPPED',
+    port: 80,
+    liveUrl: 'https://analytics-ui.hostex.dev',
+    createdAt: '2026-10-17T16:00:00Z',
+    updatedAt: '2026-10-18T12:00:00Z',
+  },
+];
+
+const INITIAL_JOBS = [
+  {
+    id: 101,
+    applicationId: 1,
+    appName: 'backend-hosting-platform',
+    jobType: 'DEPLOY',
+    status: 'COMPLETED',
+    priority: 1,
+    burstTime: 28,
+    arrivalTime: '2026-10-18T21:18:00Z',
+    startTime: '2026-10-18T21:18:10Z',
+    completionTime: '2026-10-18T21:18:38Z',
   },
   {
-    id: 5,
-    userId: 1,
-    name: 'inventory-sync',
-    repositoryUrl: 'https://github.com/acme/inventory-sync',
-    branch: 'main',
-    buildCommand: 'cargo build --release',
-    startCommand: './target/release/inventory-sync',
-    status: 'CREATED',
-    createdAt: '2026-10-10T09:00:00',
-    updatedAt: '2026-10-10T09:00:00',
+    id: 102,
+    applicationId: 2,
+    appName: 'user-auth-service',
+    jobType: 'BUILD',
+    status: 'COMPLETED',
+    priority: 2,
+    burstTime: 18,
+    arrivalTime: '2026-10-18T18:21:40Z',
+    startTime: '2026-10-18T18:21:42Z',
+    completionTime: '2026-10-18T18:22:00Z',
+  },
+  {
+    id: 103,
+    applicationId: 1,
+    appName: 'backend-hosting-platform',
+    jobType: 'RESTART',
+    status: 'QUEUED',
+    priority: 3,
+    burstTime: 12,
+    arrivalTime: '2026-10-18T21:30:00Z',
+    startTime: null,
+    completionTime: null,
   },
 ];
 
-let containers = [
-  { id: 1, applicationId: 1, dockerContainerId: 'a3f8b2c91d4e', imageName: 'payment-service:latest', status: 'RUNNING', hostPort: 8081, containerPort: 8080, createdAt: '2026-10-10T14:22:00', startedAt: '2026-10-10T14:22:30', stoppedAt: null },
-  { id: 2, applicationId: 2, dockerContainerId: 'e7d1c5a83b2f', imageName: 'user-auth-api:latest', status: 'RUNNING', hostPort: 3001, containerPort: 3000, createdAt: '2026-10-11T09:45:00', startedAt: '2026-10-11T09:45:15', stoppedAt: null },
-  { id: 3, applicationId: 3, dockerContainerId: 'b4e9f1d72a6c', imageName: 'notification-worker:latest', status: 'STOPPED', hostPort: 9090, containerPort: 8080, createdAt: '2026-10-06T10:00:00', startedAt: '2026-10-06T10:00:20', stoppedAt: '2026-10-08T11:30:00' },
+const INITIAL_ENVS = [
+  { id: 1, applicationId: 1, variableKey: 'SPRING_PROFILES_ACTIVE', variableValue: 'prod' },
+  { id: 2, applicationId: 1, variableKey: 'DATABASE_URL', variableValue: 'jdbc:mysql://db.hostex.internal:3306/hostex_prod' },
+  { id: 3, applicationId: 1, variableKey: 'JWT_SECRET_KEY', variableValue: 's3cr3t_jwt_h0st3x_k3y_992' },
+  { id: 4, applicationId: 2, variableKey: 'NODE_ENV', variableValue: 'production' },
+  { id: 5, applicationId: 2, variableKey: 'PORT', variableValue: '3001' },
 ];
 
-let workloadJobs = [
-  { id: 1, applicationId: 1, jobType: 'DEPLOY', status: 'COMPLETED', priority: 2, arrivalTime: '2026-10-10T14:20:00', burstTime: 45, startTime: '2026-10-10T14:20:10', completionTime: '2026-10-10T14:22:00' },
-  { id: 2, applicationId: 2, jobType: 'BUILD', status: 'COMPLETED', priority: 1, arrivalTime: '2026-10-11T09:40:00', burstTime: 30, startTime: '2026-10-11T09:40:15', completionTime: '2026-10-11T09:44:00' },
-  { id: 3, applicationId: 4, jobType: 'DEPLOY', status: 'RUNNING', priority: 3, arrivalTime: '2026-10-12T07:10:00', burstTime: 60, startTime: '2026-10-12T07:15:00', completionTime: null },
-  { id: 4, applicationId: 3, jobType: 'RESTART', status: 'QUEUED', priority: 1, arrivalTime: '2026-10-12T08:00:00', burstTime: 15, startTime: null, completionTime: null },
-  { id: 5, applicationId: 5, jobType: 'BUILD', status: 'QUEUED', priority: 2, arrivalTime: '2026-10-12T08:30:00', burstTime: 40, startTime: null, completionTime: null },
-  { id: 6, applicationId: 1, jobType: 'RESTART', status: 'SCHEDULED', priority: 4, arrivalTime: '2026-10-12T09:00:00', burstTime: 10, startTime: null, completionTime: null },
-];
+function load(key, defaultVal) {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultVal;
+  } catch {
+    return defaultVal;
+  }
+}
 
-let envVars = [
-  { id: 1, applicationId: 1, variableKey: 'DB_HOST', variableValue: 'mysql.internal:3306', createdAt: '2026-09-15T10:35:00', updatedAt: '2026-09-15T10:35:00' },
-  { id: 2, applicationId: 1, variableKey: 'STRIPE_KEY', variableValue: 'sk_live_***************', createdAt: '2026-09-15T10:36:00', updatedAt: '2026-10-01T14:00:00' },
-  { id: 3, applicationId: 1, variableKey: 'LOG_LEVEL', variableValue: 'INFO', createdAt: '2026-09-15T10:37:00', updatedAt: '2026-09-15T10:37:00' },
-  { id: 4, applicationId: 2, variableKey: 'JWT_SECRET', variableValue: '********', createdAt: '2026-09-20T08:20:00', updatedAt: '2026-09-20T08:20:00' },
-  { id: 5, applicationId: 2, variableKey: 'REDIS_URL', variableValue: 'redis://cache.internal:6379', createdAt: '2026-09-20T08:21:00', updatedAt: '2026-09-20T08:21:00' },
-];
-
-const mockLogs = [
-  { level: 'info', message: '2026-10-12 07:15:02 — Application starting on port 8080' },
-  { level: 'info', message: '2026-10-12 07:15:03 — Connected to MySQL database at mysql.internal:3306' },
-  { level: 'info', message: '2026-10-12 07:15:04 — Initializing Spring context...' },
-  { level: 'success', message: '2026-10-12 07:15:06 — Application started successfully in 4.2s' },
-  { level: 'info', message: '2026-10-12 07:15:10 — Health check endpoint registered at /actuator/health' },
-  { level: 'info', message: '2026-10-12 09:22:15 — POST /api/payments — 201 Created — 45ms' },
-  { level: 'info', message: '2026-10-12 09:22:18 — GET /api/payments/txn-8812 — 200 OK — 12ms' },
-  { level: 'warn', message: '2026-10-12 11:45:33 — Slow query detected: SELECT * FROM transactions WHERE status=PENDING — 850ms' },
-  { level: 'info', message: '2026-10-12 12:00:00 — Running scheduled job: cleanup-expired-sessions' },
-  { level: 'error', message: '2026-10-12 14:30:11 — Connection pool exhausted — retrying in 5s' },
-  { level: 'info', message: '2026-10-12 14:30:16 — Connection pool recovered — 8/20 connections available' },
-  { level: 'info', message: '2026-10-12 16:12:44 — GET /api/payments/summary — 200 OK — 28ms' },
-];
-
-let nextAppId = 6;
-let nextJobId = 7;
-let nextEnvId = 6;
+function save(key, val) {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (err) {
+    console.error('Storage error:', err);
+  }
+}
 
 export const mockData = {
   // Applications
   getApplications: async () => {
-    await delay(300);
-    return [...applications];
+    await delay(150);
+    return load(STORAGE_KEYS.APPS, INITIAL_APPS);
   },
+
   getApplication: async (id) => {
-    await delay(200);
-    const app = applications.find(a => a.id === Number(id));
+    await delay(100);
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const app = apps.find((a) => String(a.id) === String(id));
     if (!app) throw new Error('Application not found');
     return { ...app };
   },
+
   createApplication: async (data) => {
-    await delay(400);
-    const app = { id: nextAppId++, userId: 1, status: 'CREATED', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...data };
-    applications.push(app);
-    return { ...app };
-  },
-  updateApplication: async (id, data) => {
     await delay(300);
-    const idx = applications.findIndex(a => a.id === Number(id));
-    if (idx === -1) throw new Error('Application not found');
-    applications[idx] = { ...applications[idx], ...data, updatedAt: new Date().toISOString() };
-    return { ...applications[idx] };
-  },
-  deleteApplication: async (id) => {
-    await delay(300);
-    applications = applications.filter(a => a.id !== Number(id));
-  },
-  deployApplication: async (id) => {
-    await delay(500);
-    const idx = applications.findIndex(a => a.id === Number(id));
-    if (idx !== -1) {
-      applications[idx].status = 'DEPLOYING';
-      applications[idx].updatedAt = new Date().toISOString();
-    }
-  },
-  startApplication: async (id) => {
-    await delay(400);
-    const idx = applications.findIndex(a => a.id === Number(id));
-    if (idx !== -1) {
-      applications[idx].status = 'RUNNING';
-      applications[idx].updatedAt = new Date().toISOString();
-    }
-  },
-  stopApplication: async (id) => {
-    await delay(400);
-    const idx = applications.findIndex(a => a.id === Number(id));
-    if (idx !== -1) {
-      applications[idx].status = 'STOPPED';
-      applications[idx].updatedAt = new Date().toISOString();
-    }
-  },
-  getApplicationLogs: async () => {
-    await delay(250);
-    return [...mockLogs];
-  },
-  getApplicationMetrics: async () => {
-    await delay(200);
-    return {
-      cpuUsage: Array.from({ length: 12 }, (_, i) => ({ time: `${7 + i}:00`, value: Math.round(15 + Math.random() * 40) })),
-      memoryUsage: Array.from({ length: 12 }, (_, i) => ({ time: `${7 + i}:00`, value: Math.round(200 + Math.random() * 300) })),
-      requestCount: Array.from({ length: 12 }, (_, i) => ({ time: `${7 + i}:00`, value: Math.round(50 + Math.random() * 200) })),
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const id = Date.now();
+    const cleanName = (data.name || 'new-app').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const newApp = {
+      id,
+      userId: 1,
+      status: 'RUNNING',
+      type: data.type || 'web',
+      region: data.region || 'us-west-oregon',
+      port: 80,
+      liveUrl: `https://${cleanName}.hostex.dev`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...data,
     };
+    apps.unshift(newApp);
+    save(STORAGE_KEYS.APPS, apps);
+
+    // Also register an initial deployment job
+    const jobs = load(STORAGE_KEYS.JOBS, INITIAL_JOBS);
+    jobs.unshift({
+      id: Date.now() + 1,
+      applicationId: id,
+      appName: newApp.name,
+      jobType: 'DEPLOY',
+      status: 'COMPLETED',
+      priority: 2,
+      burstTime: 24,
+      arrivalTime: new Date().toISOString(),
+      startTime: new Date().toISOString(),
+      completionTime: new Date().toISOString(),
+    });
+    save(STORAGE_KEYS.JOBS, jobs);
+
+    return newApp;
   },
 
-  // Containers
-  getContainersByApp: async (appId) => {
+  updateApplication: async (id, data) => {
     await delay(200);
-    return containers.filter(c => c.applicationId === Number(appId));
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const idx = apps.findIndex((a) => String(a.id) === String(id));
+    if (idx === -1) throw new Error('Application not found');
+    apps[idx] = { ...apps[idx], ...data, updatedAt: new Date().toISOString() };
+    save(STORAGE_KEYS.APPS, apps);
+    return apps[idx];
   },
 
-  // Jobs
-  getJobs: async () => {
+  deleteApplication: async (id) => {
     await delay(250);
-    return [...workloadJobs].sort((a, b) => new Date(b.arrivalTime) - new Date(a.arrivalTime));
-  },
-  createJob: async (data) => {
-    await delay(400);
-    const job = { id: nextJobId++, status: 'QUEUED', arrivalTime: new Date().toISOString(), startTime: null, completionTime: null, ...data };
-    workloadJobs.push(job);
-    return { ...job };
-  },
-  cancelJob: async (id) => {
-    await delay(300);
-    const idx = workloadJobs.findIndex(j => j.id === Number(id));
-    if (idx !== -1) workloadJobs[idx].status = 'CANCELLED';
+    let apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    apps = apps.filter((a) => String(a.id) !== String(id));
+    save(STORAGE_KEYS.APPS, apps);
   },
 
-  // Environment variables
+  startApplication: async (id) => {
+    await delay(250);
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const app = apps.find((a) => String(a.id) === String(id));
+    if (app) {
+      app.status = 'RUNNING';
+      app.updatedAt = new Date().toISOString();
+      save(STORAGE_KEYS.APPS, apps);
+    }
+  },
+
+  stopApplication: async (id) => {
+    await delay(250);
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const app = apps.find((a) => String(a.id) === String(id));
+    if (app) {
+      app.status = 'STOPPED';
+      app.updatedAt = new Date().toISOString();
+      save(STORAGE_KEYS.APPS, apps);
+    }
+  },
+
+  deployApplication: async (id) => {
+    await delay(300);
+    const apps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+    const app = apps.find((a) => String(a.id) === String(id));
+    if (app) {
+      app.status = 'BUILDING';
+      save(STORAGE_KEYS.APPS, apps);
+      setTimeout(() => {
+        const freshApps = load(STORAGE_KEYS.APPS, INITIAL_APPS);
+        const target = freshApps.find((a) => String(a.id) === String(id));
+        if (target) {
+          target.status = 'RUNNING';
+          target.updatedAt = new Date().toISOString();
+          save(STORAGE_KEYS.APPS, freshApps);
+        }
+      }, 3500);
+    }
+  },
+
+  // Environment Variables
   getEnvVarsByApp: async (appId) => {
-    await delay(200);
-    return envVars.filter(e => e.applicationId === Number(appId));
-  },
-  createEnvVar: async (appId, data) => {
-    await delay(300);
-    const env = { id: nextEnvId++, applicationId: Number(appId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...data };
-    envVars.push(env);
-    return { ...env };
-  },
-  deleteEnvVar: async (id) => {
-    await delay(200);
-    envVars = envVars.filter(e => e.id !== Number(id));
+    await delay(100);
+    const envs = load(STORAGE_KEYS.ENVS, INITIAL_ENVS);
+    return envs.filter((e) => String(e.applicationId) === String(appId));
   },
 
-  // Scheduler
-  runScheduler: async (algorithm) => {
-    await delay(600);
-    const pending = workloadJobs.filter(j => j.status === 'QUEUED');
-    let ordered;
-    switch (algorithm) {
+  createEnvVar: async (appId, data) => {
+    await delay(150);
+    const envs = load(STORAGE_KEYS.ENVS, INITIAL_ENVS);
+    const newEnv = {
+      id: Date.now(),
+      applicationId: Number(appId),
+      variableKey: data.variableKey,
+      variableValue: data.variableValue,
+      createdAt: new Date().toISOString(),
+    };
+    envs.push(newEnv);
+    save(STORAGE_KEYS.ENVS, envs);
+    return newEnv;
+  },
+
+  updateEnvVar: async (appId, key, value) => {
+    await delay(150);
+    const envs = load(STORAGE_KEYS.ENVS, INITIAL_ENVS);
+    const idx = envs.findIndex((e) => String(e.applicationId) === String(appId) && e.variableKey === key);
+    if (idx !== -1) {
+      envs[idx].variableValue = value;
+      save(STORAGE_KEYS.ENVS, envs);
+    }
+  },
+
+  deleteEnvVar: async (appId, key) => {
+    await delay(150);
+    let envs = load(STORAGE_KEYS.ENVS, INITIAL_ENVS);
+    envs = envs.filter((e) => !(String(e.applicationId) === String(appId) && e.variableKey === key));
+    save(STORAGE_KEYS.ENVS, envs);
+  },
+
+  // Workload Jobs & Scheduling
+  getJobs: async () => {
+    await delay(150);
+    return load(STORAGE_KEYS.JOBS, INITIAL_JOBS);
+  },
+
+  createJob: async (jobData) => {
+    await delay(200);
+    const jobs = load(STORAGE_KEYS.JOBS, INITIAL_JOBS);
+    const newJob = {
+      id: Date.now(),
+      status: 'QUEUED',
+      arrivalTime: new Date().toISOString(),
+      startTime: null,
+      completionTime: null,
+      ...jobData,
+    };
+    jobs.unshift(newJob);
+    save(STORAGE_KEYS.JOBS, jobs);
+    return newJob;
+  },
+
+  runScheduler: async (strategy) => {
+    await delay(350);
+    const jobs = load(STORAGE_KEYS.JOBS, INITIAL_JOBS);
+    const queued = jobs.filter((j) => j.status === 'QUEUED');
+
+    let sorted;
+    switch (strategy) {
       case 'SJF':
-        ordered = [...pending].sort((a, b) => (a.burstTime || 0) - (b.burstTime || 0));
+        // Shortest Job First (matches SjfSchedulingStrategy.java)
+        sorted = [...queued].sort((a, b) => (a.burstTime || 0) - (b.burstTime || 0));
         break;
       case 'PRIORITY':
-        ordered = [...pending].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+        // Priority (matches PrioritySchedulingStrategy.java)
+        sorted = [...queued].sort((a, b) => (b.priority || 0) - (a.priority || 0));
         break;
       case 'FCFS':
       default:
-        ordered = [...pending].sort((a, b) => new Date(a.arrivalTime) - new Date(b.arrivalTime));
+        // First Come First Served (matches FcfsSchedulingStrategy.java)
+        sorted = [...queued].sort((a, b) => new Date(a.arrivalTime) - new Date(b.arrivalTime));
         break;
     }
-    return ordered;
+    return sorted;
   },
 
-  // Stats
-  getDashboardStats: async () => {
-    await delay(300);
-    const running = applications.filter(a => a.status === 'RUNNING').length;
-    const total = applications.length;
-    const activeJobs = workloadJobs.filter(j => ['QUEUED', 'SCHEDULED', 'RUNNING'].includes(j.status)).length;
-    const runningContainers = containers.filter(c => c.status === 'RUNNING').length;
-    return { totalApps: total, runningApps: running, activeJobs, runningContainers };
+  // Real-time Logs Generator
+  getApplicationLogs: async (appName = 'hostex-app') => {
+    await delay(100);
+    const now = new Date().toISOString().substring(11, 19);
+    return [
+      { time: `${now} [git]`, level: 'build', text: `Cloning repository: hostex-workspaces/${appName}` },
+      { time: `${now} [git]`, level: 'build', text: `HEAD is now at b59a541 minor (origin/main)` },
+      { time: `${now} [docker]`, level: 'build', text: `Building image hostex-app-${appName}:latest` },
+      { time: `${now} [docker]`, level: 'build', text: `Step 1/5 : FROM eclipse-temurin:21-jre-alpine` },
+      { time: `${now} [docker]`, level: 'build', text: `Step 2/5 : WORKDIR /app` },
+      { time: `${now} [docker]`, level: 'build', text: `Step 3/5 : COPY target/*.jar app.jar` },
+      { time: `${now} [docker]`, level: 'build', text: `Step 4/5 : EXPOSE 80` },
+      { time: `${now} [docker]`, level: 'build', text: `Step 5/5 : ENTRYPOINT ["java", "-jar", "app.jar"]` },
+      { time: `${now} [runtime]`, level: 'success', text: `Successfully built image hostex-app-${appName}` },
+      { time: `${now} [runtime]`, level: 'info', text: `Starting container: binding port 80 -> host port 3948` },
+      { time: `${now} [runtime]`, level: 'success', text: `Container started. Healthcheck passed: 200 OK (14ms)` },
+      { time: `${now} [http]`, level: 'info', text: `GET /actuator/health 200 OK - 8ms` },
+      { time: `${now} [http]`, level: 'info', text: `GET /api/applications 200 OK - 24ms` },
+    ];
+  },
+
+  // Metrics Data Generator
+  getApplicationMetrics: async () => {
+    await delay(100);
+    const hours = ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+    return {
+      cpuUsage: hours.map((time) => ({ time, value: Math.floor(12 + Math.random() * 28) })),
+      memoryUsage: hours.map((time) => ({ time, value: Math.floor(220 + Math.random() * 95) })),
+      networkTraffic: hours.map((time) => ({ time, value: Math.floor(45 + Math.random() * 85) })),
+      requests: hours.map((time) => ({ time, value: Math.floor(120 + Math.random() * 450) })),
+    };
   },
 };

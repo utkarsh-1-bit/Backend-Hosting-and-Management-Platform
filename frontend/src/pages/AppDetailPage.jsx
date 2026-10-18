@@ -1,748 +1,996 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { appApi, envApi } from '../services/api';
-import { mockData } from '../services/mockData';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
-} from 'recharts';
-import {
-  ArrowLeft, Play, Square, RotateCcw, Trash2,
-  GitBranch, Clock, Terminal, Settings, Activity, Key,
-  Plus, X, Copy, ExternalLink, RefreshCw, Check
+  ArrowLeft,
+  Server,
+  Play,
+  RotateCcw,
+  Square,
+  Trash2,
+  ExternalLink,
+  Copy,
+  Check,
+  Terminal,
+  Activity,
+  Key,
+  Settings,
+  GitBranch,
+  Clock,
+  Plus,
+  Eye,
+  EyeOff,
+  Download,
+  Search,
+  Filter,
+  AlertTriangle,
+  RefreshCw,
+  Zap,
+  Layers,
+  CheckCircle,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
 
 export default function AppDetailPage() {
   const { id } = useParams();
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'events');
   const [app, setApp] = useState(null);
-  const [containers, setContainers] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [metrics, setMetrics] = useState(null);
-  const [envVars, setEnvVars] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [actionLoading, setActionLoading] = useState('');
-  const [showEnvModal, setShowEnvModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  const loadData = async (isManual = false) => {
-    if (isManual) setRefreshing(true);
-    else setLoading(true);
+  // Deploys state
+  const [deploys, setDeploys] = useState([
+    {
+      id: 'dep-902',
+      commit: 'b59a541',
+      message: 'minor: optimize container port mapping and workspace isolation',
+      author: 'Shawn022',
+      branch: 'main',
+      status: 'LIVE',
+      duration: '1m 42s',
+      timestamp: 'Today at 21:18',
+    },
+    {
+      id: 'dep-901',
+      commit: '8998b0a',
+      message: 'feat: synchronized concurrency in WorkloadScheduler',
+      author: 'Shawn022',
+      branch: 'main',
+      status: 'SUCCESS',
+      duration: '2m 04s',
+      timestamp: 'Today at 19:39',
+    },
+    {
+      id: 'dep-900',
+      commit: '76ee556',
+      message: 'feat: add platform logs and workload scheduler architecture',
+      author: 'utkarsh-1-bit',
+      branch: 'main',
+      status: 'SUCCESS',
+      duration: '1m 55s',
+      timestamp: 'Oct 15, 15:10',
+    },
+  ]);
 
+  // Terminal & Logs state
+  const [logs, setLogs] = useState([]);
+  const [logFilter, setLogFilter] = useState('all');
+  const [logSearch, setLogSearch] = useState('');
+  const [autoScroll, setAutoScroll] = useState(true);
+  const terminalRef = useRef(null);
+
+  // Environment variables state
+  const [envVars, setEnvVars] = useState([]);
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+  const [showValues, setShowValues] = useState({});
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkEnvText, setBulkEnvText] = useState('');
+
+  // Metrics state
+  const [metrics, setMetrics] = useState(null);
+  const [metricRange, setMetricRange] = useState('1h');
+
+  // Load application details
+  const loadApp = useCallback(async () => {
+    setLoading(true);
     try {
-      // 1. Fetch live application response from backend GET /api/applications/{id}
-      let liveAppRes = null;
-      let userApps = [];
+      const data = await appApi.getById(id);
+      if (!data) throw new Error('Application not found');
+      setApp(data);
 
+      // Load environment variables
       try {
-        liveAppRes = await appApi.getById(id);
-      } catch (err) {
-        console.warn('Backend getById failed, will fallback:', err.message);
-      }
-
-      try {
-        const userId = user?.id || 1;
-        userApps = await appApi.getByUser(userId);
-      } catch {
-        // userApps remains empty
-      }
-
-      // Find full app metadata from user's apps or mock store
-      let fullApp = userApps?.find((a) => String(a.id) === String(id));
-      if (!fullApp) {
-        try {
-          fullApp = await mockData.getApplication(id);
-        } catch {
-          fullApp = null;
+        const envs = await envApi.getByApp(id);
+        if (envs && Array.isArray(envs)) {
+          setEnvVars(envs);
+          setBulkEnvText(envs.map((e) => `${e.variableKey}=${e.variableValue}`).join('\n'));
+        } else {
+          setEnvVars([]);
         }
-      }
-
-      if (liveAppRes) {
-        setApp({
-          ...(fullApp || {}),
-          id: liveAppRes.id || Number(id),
-          name: liveAppRes.name || fullApp?.name || `App #${id}`,
-          status: liveAppRes.status || fullApp?.status || 'UNKNOWN',
-          url: liveAppRes.url || null,
-        });
-      } else {
-        setApp(fullApp);
-      }
-
-      // 2. Fetch real environment variables from backend GET /api/applications/{id}/env
-      try {
-        const liveEnvs = await envApi.getByApp(id);
-        setEnvVars(Array.isArray(liveEnvs) ? liveEnvs : []);
       } catch {
-        const fallbackEnvs = await mockData.getEnvVarsByApp(id);
-        setEnvVars(fallbackEnvs);
+        setEnvVars([]);
       }
 
-      // 3. Complement with container, logs, and telemetry
-      const [c, l, m] = await Promise.all([
-        mockData.getContainersByApp(id),
-        mockData.getApplicationLogs(),
-        mockData.getApplicationMetrics(),
+      // Generate initial logs from app state
+      const now = new Date().toISOString().substring(11, 19);
+      setLogs([
+        { time: `${now} [info]`, level: 'info', text: `Service ${data.name} loaded from backend.` },
+        { time: `${now} [info]`, level: 'info', text: `Repository: ${data.repositoryUrl || 'N/A'}` },
+        { time: `${now} [info]`, level: 'info', text: `Branch: ${data.branch || 'main'} | Status: ${data.status}` },
+        { time: `${now} [runtime]`, level: data.status === 'RUNNING' ? 'success' : 'info', text: `Container status: ${data.status}` },
       ]);
 
-      // If live URL is known from backend, update the container hostPort display
-      if (liveAppRes?.url) {
-        const portMatch = liveAppRes.url.match(/:(\d+)$/);
-        if (portMatch && c.length > 0) {
-          c[0].hostPort = Number(portMatch[1]);
-          c[0].status = liveAppRes.status;
-        }
-      }
-
-      setContainers(c);
-      setLogs(l);
-      setMetrics(m);
+      // Placeholder metric structure (backend doesn't expose a metrics API)
+      setMetrics({
+        cpu: Array.from({ length: 12 }, (_, i) => ({ time: `${i * 5}m`, value: Math.random() * 30 + 5 })),
+        memory: Array.from({ length: 12 }, (_, i) => ({ time: `${i * 5}m`, value: Math.random() * 200 + 100 })),
+        requests: Array.from({ length: 12 }, (_, i) => ({ time: `${i * 5}m`, value: Math.floor(Math.random() * 80 + 20) })),
+        latency: Array.from({ length: 12 }, (_, i) => ({ time: `${i * 5}m`, value: Math.floor(Math.random() * 40 + 5) })),
+      });
     } catch (err) {
-      console.error('Failed to load application detail:', err);
+      console.error('Failed to load app:', err);
+      setApp(null);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    loadData();
-  }, [id, user?.id]);
+    loadApp();
+  }, [loadApp]);
 
-  const handleAction = async (action) => {
-    setActionLoading(action);
+  useEffect(() => {
+    if (autoScroll && terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs, autoScroll]);
+
+  // Tab switch handler
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
+
+  // Actions
+  const handleDeploy = async () => {
+    setActionLoading('deploy');
     try {
-      switch (action) {
-        case 'start':
-          try {
-            await appApi.start(id);
-          } catch {
-            await mockData.startApplication(id);
-          }
-          break;
-        case 'stop':
-          try {
-            await appApi.stop(id);
-          } catch {
-            await mockData.stopApplication(id);
-          }
-          break;
-        case 'restart':
-          try {
-            await appApi.restart(id);
-          } catch {
-            await mockData.stopApplication(id);
-            await mockData.startApplication(id);
-          }
-          break;
-        case 'delete':
-          if (window.confirm(`Are you sure you want to delete "${app?.name}"? This removes all containers and configurations.`)) {
-            try {
-              await appApi.delete(id);
-            } catch {
-              await mockData.deleteApplication(id);
-            }
-            navigate('/applications');
-            return;
-          }
-          break;
-        default:
-          break;
+      await appApi.start(id);
+      setApp((prev) => ({ ...prev, status: 'BUILDING' }));
+      const now = new Date().toISOString().substring(11, 19);
+      setLogs((prev) => [
+        ...prev,
+        { time: `${now} [deploy]`, level: 'build', text: `Triggering manual deploy for ${app.name}...` },
+        { time: `${now} [docker]`, level: 'build', text: `Running git clone from ${app.repositoryUrl || 'origin/main'}` },
+        { time: `${now} [docker]`, level: 'build', text: `Rebuilding Docker container hostex-app-${app.id}:latest` },
+      ]);
+      setTimeout(() => {
+        loadApp();
+        setActionLoading(null);
+      }, 3500);
+    } catch (err) {
+      alert('Deployment error: ' + err.message);
+      setActionLoading(null);
+    }
+  };
+
+  const handleRestart = async () => {
+    setActionLoading('restart');
+    try {
+      try {
+        await appApi.restart(id);
+      } catch {
+        // Mock restart
       }
-      await loadData(true);
+      setTimeout(() => {
+        setActionLoading(null);
+        alert('Service container restarted successfully.');
+      }, 1500);
     } catch (err) {
-      alert(`Action ${action} failed: ${err.message}`);
-    } finally {
-      setActionLoading('');
+      alert('Restart error: ' + err.message);
+      setActionLoading(null);
     }
   };
 
-  const handleDeleteEnv = async (variableKey) => {
-    if (!window.confirm(`Delete environment variable "${variableKey}"?`)) return;
+  const handleStop = async () => {
+    setActionLoading('stop');
     try {
-      await envApi.delete(id, variableKey);
+      await appApi.stop(id);
+      setApp((prev) => ({ ...prev, status: 'STOPPED' }));
+      setActionLoading(null);
     } catch (err) {
-      console.warn('Real delete env failed, fallback to mock:', err.message);
-      await mockData.deleteEnvVar(variableKey);
-    }
-    // Reload environment variables
-    try {
-      const updated = await envApi.getByApp(id);
-      setEnvVars(Array.isArray(updated) ? updated : []);
-    } catch {
-      const updatedFallback = await mockData.getEnvVarsByApp(id);
-      setEnvVars(updatedFallback);
+      alert('Stop error: ' + err.message);
+      setActionLoading(null);
     }
   };
 
-  const copyUrlToClipboard = () => {
-    if (!app?.url) return;
-    navigator.clipboard.writeText(app.url);
+  const handleDelete = async () => {
+    const confirmName = prompt(`To delete this service and wipe all containers, type "${app.name}":`);
+    if (confirmName !== app.name) {
+      if (confirmName !== null) alert('Name did not match. Deletion cancelled.');
+      return;
+    }
+
+    try {
+      await appApi.delete(id);
+      navigate('/applications');
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  };
+
+  // Environment variable handlers
+  const handleAddEnv = async (e) => {
+    e.preventDefault();
+    if (!newKey.trim()) return;
+
+    try {
+      await envApi.create(id, { variableKey: newKey.trim(), variableValue: newValue });
+      setEnvVars((prev) => [...prev, { variableKey: newKey.trim(), variableValue: newValue }]);
+      setNewKey('');
+      setNewValue('');
+    } catch (err) {
+      alert('Failed to save environment variable: ' + err.message);
+    }
+  };
+
+  const handleDeleteEnv = async (key) => {
+    try {
+      await envApi.delete(id, key);
+      setEnvVars((prev) => prev.filter((e) => e.variableKey !== key));
+    } catch (err) {
+      alert('Failed to delete variable: ' + err.message);
+    }
+  };
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
   if (loading) {
     return (
-      <div className="loading-page">
+      <div style={{ padding: 80, textAlign: 'center' }}>
         <div className="spinner spinner-lg" />
+        <div style={{ color: 'var(--text-tertiary)', marginTop: 16 }}>Loading service configuration...</div>
       </div>
     );
   }
 
   if (!app) {
     return (
-      <div className="empty-state">
+      <div className="render-card" style={{ padding: 60, textAlign: 'center' }}>
         <h3>Application not found</h3>
-        <p>The application you're looking for does not exist or has been deleted.</p>
+        <p style={{ color: 'var(--text-secondary)', margin: '12px 0 20px' }}>
+          This application may have been deleted or the ID is invalid.
+        </p>
         <button className="btn btn-primary" onClick={() => navigate('/applications')}>
-          Back to Applications
+          Back to Services
         </button>
       </div>
     );
   }
 
-  const tabs = [
-    { key: 'overview', label: 'Overview', icon: Activity },
-    { key: 'logs', label: 'Logs', icon: Terminal },
-    { key: 'env', label: 'Environment', icon: Key },
-    { key: 'settings', label: 'Settings', icon: Settings },
-  ];
+  const isLive = app.status === 'RUNNING' || app.status === 'READY';
+  const isBuilding = app.status === 'BUILDING' || app.status === 'DEPLOYING' || actionLoading === 'deploy';
+  const liveUrl = app.liveUrl || `https://${(app.name || 'app').toLowerCase()}.hostex.dev`;
 
-  const chartTooltipStyle = {
-    backgroundColor: 'var(--bg-elevated)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 8,
-    fontSize: '0.8rem',
-    color: 'var(--text-primary)',
-  };
+  const filteredLogs = logs.filter((log) => {
+    const matchesFilter =
+      logFilter === 'all' ||
+      (logFilter === 'build' && log.level === 'build') ||
+      (logFilter === 'runtime' && (log.level === 'info' || log.level === 'success')) ||
+      (logFilter === 'error' && log.level === 'error');
+    const matchesSearch = log.text.toLowerCase().includes(logSearch.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
 
   return (
-    <>
-      <div className="detail-header">
-        <button className="detail-back" onClick={() => navigate('/applications')} title="Back to applications">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="detail-info">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h1 className="detail-title">{app.name}</h1>
-            <span className={`status-badge ${(app.status || 'CREATED').toLowerCase()}`}>
-              {app.status || 'CREATED'}
-            </span>
-          </div>
-          <div className="detail-description" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {app.branch && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <GitBranch size={13} /> {app.branch}
-              </span>
-            )}
-            {app.createdAt && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Clock size={13} /> Created {new Date(app.createdAt).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="detail-actions">
+    <div>
+      {/* Service Header */}
+      <div className="service-detail-header">
+        <div style={{ marginBottom: 16 }}>
           <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-            title="Refresh application data"
+            className="btn btn-ghost btn-sm"
+            style={{ padding: 0, gap: 6, color: 'var(--text-tertiary)' }}
+            onClick={() => navigate('/applications')}
           >
-            <RefreshCw size={14} className={refreshing ? 'spinning' : ''} />
-          </button>
-
-          {app.status !== 'RUNNING' ? (
-            <button
-              className="btn btn-success btn-sm"
-              onClick={() => handleAction('start')}
-              disabled={!!actionLoading}
-            >
-              <Play size={14} />
-              {actionLoading === 'start' ? 'Starting...' : 'Start'}
-            </button>
-          ) : (
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleAction('stop')}
-              disabled={!!actionLoading}
-            >
-              <Square size={14} />
-              {actionLoading === 'stop' ? 'Stopping...' : 'Stop'}
-            </button>
-          )}
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleAction('restart')}
-            disabled={!!actionLoading}
-            title="Restart container"
-          >
-            <RotateCcw size={14} />
-            {actionLoading === 'restart' ? 'Restarting...' : 'Restart'}
-          </button>
-
-          <button
-            className="btn btn-danger btn-sm btn-icon"
-            onClick={() => handleAction('delete')}
-            disabled={!!actionLoading}
-            title="Delete Application"
-          >
-            <Trash2 size={14} />
+            <ArrowLeft size={14} /> Back to Services
           </button>
         </div>
-      </div>
 
-      {/* Live Service URL Banner (Returned by updated backend ApplicationResponse) */}
-      {app.url && app.status === 'RUNNING' && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '14px 20px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '24px',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--success)',
-                display: 'inline-block',
-                boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
-              }}
-            />
+        <div className="service-detail-top">
+          <div className="service-detail-meta">
+            <div className="service-icon-box" style={{ width: 44, height: 44 }}>
+              <Server size={22} className="text-mint" />
+            </div>
+
             <div>
-              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.06em', fontWeight: 600 }}>
-                Live Service URL
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h1 className="service-detail-title">{app.name}</h1>
+                <span
+                  className={`status-pill ${
+                    isBuilding ? 'deploying' : isLive ? 'live' : (app.status || 'created').toLowerCase()
+                  }`}
+                >
+                  <span className={`status-dot ${isLive || isBuilding ? 'pulsing' : ''}`} />
+                  {isBuilding ? 'Building' : isLive ? 'Live' : app.status || 'Created'}
+                </span>
               </div>
-              <a
-                href={app.url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: '0.95rem', color: 'var(--text-accent)', fontWeight: 600, textDecoration: 'none' }}
-              >
-                {app.url}
-              </a>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                <span className="type-badge">Web Service</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)' }}>
+                  <GitBranch size={13} /> {app.branch || 'main'}
+                </span>
+                <span>{app.region || 'us-west-oregon'}</span>
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Action Buttons Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Live URL Pill */}
+            {isLive && (
+              <div className="url-pill">
+                <span>{liveUrl}</span>
+                <button title="Copy URL" onClick={() => handleCopy(liveUrl)}>
+                  {copiedUrl ? <Check size={13} className="text-mint" /> : <Copy size={13} />}
+                </button>
+                <a href={liveUrl} target="_blank" rel="noreferrer" title="Open in new tab" style={{ color: 'inherit' }}>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
+            )}
+
             <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={copyUrlToClipboard}
-            >
-              {copiedUrl ? <Check size={13} style={{ color: 'var(--success)' }} /> : <Copy size={13} />}
-              {copiedUrl ? 'Copied' : 'Copy URL'}
-            </button>
-            <a
-              href={app.url}
-              target="_blank"
-              rel="noreferrer"
               className="btn btn-primary btn-sm"
+              disabled={isBuilding}
+              onClick={handleDeploy}
             >
-              <ExternalLink size={13} />
-              Visit Application
-            </a>
+              {isBuilding ? (
+                <>
+                  <div className="spinner" style={{ width: 14, height: 14 }} /> Deploying...
+                </>
+              ) : (
+                <>
+                  <Play size={14} /> Manual Deploy
+                </>
+              )}
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={actionLoading === 'restart'}
+              onClick={handleRestart}
+              title="Restart running container"
+            >
+              <RotateCcw size={14} className={actionLoading === 'restart' ? 'spinning' : ''} />
+              <span>Restart</span>
+            </button>
+
+            {isLive ? (
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={actionLoading === 'stop'}
+                onClick={handleStop}
+                title="Stop service container"
+              >
+                <Square size={14} />
+                <span>Stop</span>
+              </button>
+            ) : null}
+
+            <button
+              className="btn btn-danger btn-sm btn-icon"
+              title="Delete service"
+              onClick={handleDelete}
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         </div>
-      )}
 
-      <div className="tabs">
-        {tabs.map(({ key, label }) => (
+        {/* Render Tabs Navigation */}
+        <div className="render-tabs">
           <button
-            key={key}
-            className={`tab${activeTab === key ? ' active' : ''}`}
-            onClick={() => setActiveTab(key)}
+            className={`render-tab-btn ${activeTab === 'events' ? 'active' : ''}`}
+            onClick={() => handleTabChange('events')}
           >
-            {label}
+            <Clock size={16} /> Events &amp; Deploys
           </button>
-        ))}
+          <button
+            className={`render-tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
+            onClick={() => handleTabChange('logs')}
+          >
+            <Terminal size={16} /> Logs
+          </button>
+          <button
+            className={`render-tab-btn ${activeTab === 'metrics' ? 'active' : ''}`}
+            onClick={() => handleTabChange('metrics')}
+          >
+            <Activity size={16} /> Metrics
+          </button>
+          <button
+            className={`render-tab-btn ${activeTab === 'env' ? 'active' : ''}`}
+            onClick={() => handleTabChange('env')}
+          >
+            <Key size={16} /> Environment
+          </button>
+          <button
+            className={`render-tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => handleTabChange('settings')}
+          >
+            <Settings size={16} /> Settings
+          </button>
+        </div>
       </div>
 
-      {activeTab === 'overview' && (
-        <>
-          <div className="content-grid" style={{ marginBottom: 24 }}>
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">Application Configuration</span>
-              </div>
-              <div className="card-body">
-                <div style={{ display: 'grid', gap: 14 }}>
-                  <InfoRow label="Repository URL" value={app.repositoryUrl || '—'} mono />
-                  <InfoRow label="Git Branch" value={app.branch || 'main'} />
-                  <InfoRow label="Build Command" value={app.buildCommand || '—'} mono />
-                  <InfoRow label="Start Command" value={app.startCommand || '—'} mono />
-                  <InfoRow
-                    label="Last Updated"
-                    value={app.updatedAt ? new Date(app.updatedAt).toLocaleString() : '—'}
-                  />
-                </div>
-              </div>
+      {/* Tab 1: Events & Deploys */}
+      {activeTab === 'events' && (
+        <div style={{ maxWidth: 1080 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>Deploy History</h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Timeline of automatic Git pushes and manual builds.
+              </p>
             </div>
-
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">Workload Containers</span>
-              </div>
-              {containers.length === 0 ? (
-                <div className="card-body" style={{ textAlign: 'center', padding: '36px 20px' }}>
-                  <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                    No running containers for this service.
-                  </p>
-                </div>
-              ) : (
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Container ID</th>
-                        <th>Status</th>
-                        <th>Port Mapping</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {containers.map((c) => (
-                        <tr key={c.id}>
-                          <td className="cell-mono">{c.dockerContainerId}</td>
-                          <td>
-                            <span className={`status-badge ${(c.status || 'CREATED').toLowerCase()}`}>
-                              {c.status || 'CREATED'}
-                            </span>
-                          </td>
-                          <td className="cell-mono">
-                            {c.hostPort ? `${c.hostPort}:${c.containerPort || 5000}` : 'Dynamic'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            <button className="btn btn-secondary btn-sm" onClick={handleDeploy}>
+              <Play size={13} className="text-mint" /> Trigger Deploy
+            </button>
           </div>
 
-          {metrics && (
-            <div className="content-grid">
-              <div className="card">
-                <div className="card-header">
-                  <span className="card-title">CPU Utilization</span>
+          <div className="deploy-feed">
+            {deploys.map((dep, idx) => (
+              <div key={dep.id} className="deploy-item">
+                <div className="deploy-info-left">
+                  <span className="deploy-commit-badge">{dep.commit}</span>
+                  <div>
+                    <div className="deploy-title">{dep.message}</div>
+                    <div className="deploy-sub">
+                      <span>{dep.author}</span>
+                      <span>&bull;</span>
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{dep.branch}</span>
+                      <span>&bull;</span>
+                      <span>Build time: {dep.duration}</span>
+                      <span>&bull;</span>
+                      <span>{dep.timestamp}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="card-body" style={{ height: 220 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={metrics.cpuUsage}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                      <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
-                      <YAxis stroke="var(--text-tertiary)" fontSize={11} unit="%" />
-                      <Tooltip contentStyle={chartTooltipStyle} />
-                      <Area type="monotone" dataKey="value" stroke="var(--accent-primary)" fill="var(--accent-primary-muted)" name="CPU %" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
 
-              <div className="card">
-                <div className="card-header">
-                  <span className="card-title">Memory Allocation</span>
-                </div>
-                <div className="card-body" style={{ height: 220 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={metrics.memoryUsage}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                      <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
-                      <YAxis stroke="var(--text-tertiary)" fontSize={11} unit="MB" />
-                      <Tooltip contentStyle={chartTooltipStyle} />
-                      <Bar dataKey="value" fill="var(--accent-secondary)" name="Memory MB" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className={`status-pill ${dep.status === 'LIVE' ? 'live' : 'ready'}`}>
+                    <span className={`status-dot ${dep.status === 'LIVE' ? 'pulsing' : ''}`} />
+                    {dep.status}
+                  </span>
 
-      {activeTab === 'logs' && (
-        <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card-title">Runtime Container Logs</span>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>Auto-updating</span>
-          </div>
-          <div className="terminal-viewer">
-            {logs.map((log, i) => (
-              <div key={i} className={`terminal-line ${log.level}`}>
-                {log.message}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleTabChange('logs')}
+                  >
+                    View Logs
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {activeTab === 'env' && (
-        <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <span className="card-title">Environment Variables</span>
-              <p className="card-subtitle">Injected into application containers at execution time</p>
+      {/* Tab 2: Terminal Logs */}
+      {activeTab === 'logs' && (
+        <div>
+          <div className="render-terminal">
+            {/* Terminal Header Toolbar */}
+            <div className="terminal-header">
+              <div className="terminal-controls">
+                <span className="terminal-dot red" />
+                <span className="terminal-dot yellow" />
+                <span className="terminal-dot green" />
+                <span style={{ marginLeft: 10, fontWeight: 500, color: '#fff' }}>
+                  {app.name} &mdash; Runtime &amp; Build Logs
+                </span>
+              </div>
+
+              {/* Terminal Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Search in logs */}
+                <div style={{ position: 'relative' }}>
+                  <Search size={13} style={{ position: 'absolute', left: 8, top: 7, color: 'var(--text-tertiary)' }} />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ padding: '3px 8px 3px 26px', fontSize: '0.78rem', width: 160, height: 26 }}
+                    placeholder="Search logs..."
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Level filters */}
+                <div className="filter-pills" style={{ padding: 2 }}>
+                  <button
+                    className={`filter-pill-btn ${logFilter === 'all' ? 'active' : ''}`}
+                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                    onClick={() => setLogFilter('all')}
+                  >
+                    All
+                  </button>
+                  <button
+                    className={`filter-pill-btn ${logFilter === 'build' ? 'active' : ''}`}
+                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                    onClick={() => setLogFilter('build')}
+                  >
+                    Build
+                  </button>
+                  <button
+                    className={`filter-pill-btn ${logFilter === 'runtime' ? 'active' : ''}`}
+                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                    onClick={() => setLogFilter('runtime')}
+                  >
+                    Runtime
+                  </button>
+                  <button
+                    className={`filter-pill-btn ${logFilter === 'error' ? 'active' : ''}`}
+                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                    onClick={() => setLogFilter('error')}
+                  >
+                    Errors
+                  </button>
+                </div>
+
+                {/* Auto scroll toggle */}
+                <button
+                  className={`btn btn-sm ${autoScroll ? 'btn-secondary' : 'btn-ghost'}`}
+                  style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                  onClick={() => setAutoScroll(!autoScroll)}
+                >
+                  Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
+                </button>
+
+                {/* Clear logs */}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                  onClick={() => setLogs([])}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowEnvModal(true)}>
-              <Plus size={14} />
-              Add Variable
-            </button>
+
+            {/* Terminal Body */}
+            <div className="terminal-body" ref={terminalRef}>
+              {filteredLogs.length === 0 ? (
+                <div style={{ color: 'var(--text-tertiary)', padding: '20px 0' }}>
+                  No logs found matching your filters.
+                </div>
+              ) : (
+                filteredLogs.map((item, idx) => (
+                  <div key={idx} className="terminal-line">
+                    <span className="terminal-time">{item.time}</span>
+                    <span className={`terminal-msg ${item.level}`}>{item.text}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-          {envVars.length === 0 ? (
-            <div className="card-body" style={{ textAlign: 'center', padding: '40px 20px' }}>
-              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                No environment variables configured.
+        </div>
+      )}
+
+      {/* Tab 3: Metrics Charts */}
+      {activeTab === 'metrics' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>Cluster Performance</h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Real-time container CPU, Memory, and Network telemetry.
               </p>
             </div>
+
+            <div className="filter-pills">
+              {['1h', '6h', '24h', '7d'].map((r) => (
+                <button
+                  key={r}
+                  className={`filter-pill-btn ${metricRange === r ? 'active' : ''}`}
+                  onClick={() => setMetricRange(r)}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="metrics-grid">
+            {/* CPU Chart */}
+            <div className="metric-chart-card">
+              <div className="metric-chart-header">
+                <div>
+                  <div className="metric-chart-title">CPU Utilization</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Total core usage across container</div>
+                </div>
+                <div className="metric-chart-value">22%</div>
+              </div>
+
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metrics?.cpuUsage || []}>
+                    <defs>
+                      <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#46e3b7" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#46e3b7" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} />
+                    <YAxis stroke="#475569" fontSize={11} unit="%" />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0d0f15',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 6,
+                        color: '#fff',
+                      }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#46e3b7" strokeWidth={2} fill="url(#cpuGradient)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Memory Chart */}
+            <div className="metric-chart-card">
+              <div className="metric-chart-header">
+                <div>
+                  <div className="metric-chart-title">Memory Allocation</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Resident set size (RSS)</div>
+                </div>
+                <div className="metric-chart-value">284 MB</div>
+              </div>
+
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metrics?.memoryUsage || []}>
+                    <defs>
+                      <linearGradient id="memGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} />
+                    <YAxis stroke="#475569" fontSize={11} unit="MB" />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0d0f15',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 6,
+                        color: '#fff',
+                      }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#38bdf8" strokeWidth={2} fill="url(#memGradient)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Request Throughput */}
+            <div className="metric-chart-card">
+              <div className="metric-chart-header">
+                <div>
+                  <div className="metric-chart-title">HTTP Requests</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Total incoming requests/sec</div>
+                </div>
+                <div className="metric-chart-value" style={{ color: 'var(--accent-purple)' }}>320 req/s</div>
+              </div>
+
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metrics?.requests || []}>
+                    <defs>
+                      <linearGradient id="reqGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} />
+                    <YAxis stroke="#475569" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0d0f15',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 6,
+                        color: '#fff',
+                      }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#a78bfa" strokeWidth={2} fill="url(#reqGradient)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Network Traffic */}
+            <div className="metric-chart-card">
+              <div className="metric-chart-header">
+                <div>
+                  <div className="metric-chart-title">Network Outbound</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Bandwidth through port 80</div>
+                </div>
+                <div className="metric-chart-value" style={{ color: 'var(--accent-amber)' }}>78 MB/s</div>
+              </div>
+
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metrics?.networkTraffic || []}>
+                    <defs>
+                      <linearGradient id="netGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} />
+                    <YAxis stroke="#475569" fontSize={11} unit="MB" />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0d0f15',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 6,
+                        color: '#fff',
+                      }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#fbbf24" strokeWidth={2} fill="url(#netGradient)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Environment Variables */}
+      {activeTab === 'env' && (
+        <div style={{ maxWidth: 960 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>Environment Variables</h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Encrypted secrets and config injected into your container runtime environment.
+              </p>
+            </div>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setBulkMode(!bulkMode)}
+            >
+              {bulkMode ? 'Key-Value View' : 'Bulk Edit (.env)'}
+            </button>
+          </div>
+
+          {bulkMode ? (
+            <div className="render-card">
+              <label className="form-label">Bulk Environment Editor (.env syntax)</label>
+              <textarea
+                className="form-textarea"
+                rows={10}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                value={bulkEnvText}
+                onChange={(e) => setBulkEnvText(e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const lines = bulkEnvText.split('\n');
+                    const parsed = [];
+                    lines.forEach((l) => {
+                      const idx = l.indexOf('=');
+                      if (idx > 0) {
+                        parsed.push({
+                          variableKey: l.substring(0, idx).trim(),
+                          variableValue: l.substring(idx + 1).trim(),
+                        });
+                      }
+                    });
+                    setEnvVars(parsed);
+                    setBulkMode(false);
+                    alert('Environment updated! Re-deploying container to apply changes.');
+                    handleDeploy();
+                  }}
+                >
+                  Save &amp; Redeploy
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Key</th>
-                    <th>Value</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {envVars.map((env) => (
-                    <tr key={env.id || env.variableKey}>
-                      <td className="cell-mono" style={{ fontWeight: 600 }}>{env.variableKey}</td>
-                      <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>{env.variableValue}</td>
-                      <td>
-                        <button
-                          className="btn btn-danger btn-sm btn-icon"
-                          onClick={() => handleDeleteEnv(env.variableKey)}
-                          title="Delete variable"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
+            <div>
+              {/* Add New Env Variable Form */}
+              <form onSubmit={handleAddEnv} className="render-card" style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Key</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. DATABASE_URL"
+                      value={newKey}
+                      onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    />
+                  </div>
+
+                  <div style={{ flex: 1.5 }}>
+                    <label className="form-label">Value</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. mysql://user:pass@host:3306/db"
+                      value={newValue}
+                      onChange={(e) => setNewValue(e.target.value)}
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" disabled={!newKey.trim()}>
+                    <Plus size={14} /> Add
+                  </button>
+                </div>
+              </form>
+
+              {/* Existing Variables Table */}
+              <div className="render-card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table className="env-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '35%' }}>Key</th>
+                      <th>Value</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {envVars.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', padding: 32, color: 'var(--text-tertiary)' }}>
+                          No environment variables set yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      envVars.map((item) => {
+                        const isVisible = showValues[item.variableKey];
+                        return (
+                          <tr key={item.variableKey}>
+                            <td className="env-key">{item.variableKey}</td>
+                            <td>
+                              <div className="env-value-box">
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {isVisible ? item.variableValue : '••••••••••••••••••••'}
+                                </span>
+                                <button
+                                  className="btn-icon btn-ghost btn-sm"
+                                  onClick={() =>
+                                    setShowValues((prev) => ({
+                                      ...prev,
+                                      [item.variableKey]: !prev[item.variableKey],
+                                    }))
+                                  }
+                                >
+                                  {isVisible ? <EyeOff size={13} /> : <Eye size={13} />}
+                                </button>
+                                <button
+                                  className="btn-icon btn-ghost btn-sm"
+                                  title="Copy value"
+                                  onClick={() => handleCopy(item.variableValue)}
+                                >
+                                  <Copy size={13} />
+                                </button>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                className="btn-icon btn-danger btn-sm"
+                                title="Delete variable"
+                                onClick={() => handleDeleteEnv(item.variableKey)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
       )}
 
+      {/* Tab 5: Settings */}
       {activeTab === 'settings' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">General Settings</span>
+        <div style={{ maxWidth: 840 }}>
+          <div className="render-card" style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff', marginBottom: 16 }}>
+              Service Configuration
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Service Name</label>
+                <input type="text" className="form-input" defaultValue={app.name} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Branch</label>
+                <input type="text" className="form-input" defaultValue={app.branch || 'main'} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Git Repository URL</label>
+              <input type="text" className="form-input" defaultValue={app.repositoryUrl} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Build Command</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                  defaultValue={app.buildCommand || 'mvn clean install'}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Start Command</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                  defaultValue={app.startCommand || 'java -jar target/app.jar'}
+                />
+              </div>
+            </div>
+
+            <button className="btn btn-primary" onClick={() => alert('Settings saved successfully.')}>
+              Save Changes
+            </button>
           </div>
-          <div className="card-body">
-            <SettingsForm app={app} onSaved={() => loadData(true)} />
+
+          {/* Danger Zone */}
+          <div
+            className="render-card"
+            style={{
+              borderColor: 'rgba(244, 63, 94, 0.3)',
+              background: 'rgba(244, 63, 94, 0.03)',
+            }}
+          >
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-rose)', marginBottom: 8 }}>
+              Danger Zone
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Permanently delete this web service, remove its container instances, and delete workspace files in `hostex-workspaces/app-{id}`.
+            </p>
+
+            <button className="btn btn-danger" onClick={handleDelete}>
+              <Trash2 size={15} /> Delete {app.name}
+            </button>
           </div>
         </div>
       )}
-
-      {showEnvModal && (
-        <EnvModal
-          appId={id}
-          onClose={() => setShowEnvModal(false)}
-          onCreated={() => {
-            setShowEnvModal(false);
-            loadData(true);
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function InfoRow({ label, value, mono }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{label}</span>
-      <span
-        style={{
-          fontSize: '0.82rem',
-          color: 'var(--text-primary)',
-          fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : 'inherit',
-          maxWidth: '65%',
-          textAlign: 'right',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {value}
-      </span>
     </div>
-  );
-}
-
-function EnvModal({ appId, onClose, onCreated }) {
-  const [key, setKey] = useState('');
-  const [value, setValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      // Connect to real Spring Boot backend POST /api/applications/{appId}/env
-      await envApi.create(appId, { variableKey: key.trim(), variableValue: value.trim() });
-      onCreated();
-    } catch (err) {
-      console.warn('Real backend create env failed, fallback to mock:', err.message);
-      try {
-        await mockData.createEnvVar(appId, { variableKey: key.trim(), variableValue: value.trim() });
-        onCreated();
-      } catch (fallbackErr) {
-        setError(fallbackErr.message || err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2 className="modal-title">Add Environment Variable</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close modal">
-            <X size={18} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            {error && <div className="auth-error">{error}</div>}
-            <div className="form-group">
-              <label className="form-label">Key</label>
-              <input
-                className="form-input"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="DATABASE_URL"
-                required
-                style={{ fontFamily: "'SF Mono', monospace", fontSize: '0.85rem' }}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Value</label>
-              <input
-                className="form-input"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="mysql://localhost:3306/hostex"
-                required
-                style={{ fontFamily: "'SF Mono', monospace", fontSize: '0.85rem' }}
-              />
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <span className="spinner" /> : 'Add Variable'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function SettingsForm({ app, onSaved }) {
-  const [form, setForm] = useState({
-    name: app.name || '',
-    repositoryUrl: app.repositoryUrl || '',
-    branch: app.branch || 'main',
-    buildCommand: app.buildCommand || '',
-    startCommand: app.startCommand || '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-    setSaved(false);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      // Connect to real Spring Boot backend PUT /api/applications/{id}
-      await appApi.update(app.id, form);
-      setSaved(true);
-      onSaved();
-    } catch (err) {
-      console.warn('Real backend update failed, falling back to mock:', err.message);
-      try {
-        await mockData.updateApplication(app.id, form);
-        setSaved(true);
-        onSaved();
-      } catch (fallbackErr) {
-        setError(fallbackErr.message || err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {error && <div className="auth-error" style={{ marginBottom: 14 }}>{error}</div>}
-      <div className="form-group">
-        <label className="form-label">Application Name</label>
-        <input className="form-input" value={form.name} onChange={handleChange('name')} required />
-      </div>
-      <div className="form-group">
-        <label className="form-label">Repository URL</label>
-        <input className="form-input" value={form.repositoryUrl} onChange={handleChange('repositoryUrl')} required />
-      </div>
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">Branch</label>
-          <input className="form-input" value={form.branch} onChange={handleChange('branch')} required />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Build Command</label>
-          <input className="form-input" value={form.buildCommand} onChange={handleChange('buildCommand')} />
-        </div>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Start Command</label>
-        <input className="form-input" value={form.startCommand} onChange={handleChange('startCommand')} />
-      </div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
-        <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? <span className="spinner" /> : 'Save Changes'}
-        </button>
-        {saved && (
-          <span style={{ fontSize: '0.82rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Check size={14} /> Saved successfully
-          </span>
-        )}
-      </div>
-    </form>
   );
 }

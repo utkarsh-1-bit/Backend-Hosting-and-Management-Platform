@@ -1,13 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ApplicationsPage from './pages/ApplicationsPage';
 import AppDetailPage from './pages/AppDetailPage';
 import JobsPage from './pages/JobsPage';
-import SchedulerPage from './pages/SchedulerPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 
@@ -32,7 +32,10 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Authentication routes */}
+          {/* Public Landing Page - Homepage */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Authentication routes */}
           <Route
             path="/login"
             element={
@@ -50,9 +53,21 @@ export default function App() {
             }
           />
 
-          {/* Authenticated Dashboard & Management routes */}
+          {/* Dashboard Console - Protected App Shell */}
           <Route
-            path="/"
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+          </Route>
+
+          {/* Authenticated Management Console */}
+          <Route
+            path="/app"
             element={
               <ProtectedRoute>
                 <Layout />
@@ -60,17 +75,58 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="applications" element={<ApplicationsPage />} />
             <Route path="applications/:id" element={<AppDetailPage />} />
             <Route path="jobs" element={<JobsPage />} />
-            <Route path="scheduler" element={<SchedulerPage />} />
             <Route path="logs" element={<LogsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Legacy route support */}
+          <Route
+            path="/applications"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<ApplicationsPage />} />
+            <Route path=":id" element={<AppDetailPage />} />
+          </Route>
+          <Route
+            path="/jobs"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<JobsPage />} />
+          </Route>
+          <Route
+            path="/logs"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<LogsPage />} />
+          </Route>
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<SettingsPage />} />
+          </Route>
+
+          {/* Fallback: unknown routes → landing */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -1,200 +1,239 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { mockData } from '../services/mockData';
 import {
-  Activity,
-  Play,
-  RotateCw,
   Cpu,
-  Layers,
+  Play,
+  RotateCcw,
+  Zap,
   ArrowRight,
-  Sparkles,
-  Info
+  Plus,
+  Clock,
+  Layers,
+  CheckCircle,
+  Code2,
 } from 'lucide-react';
 
 export default function SchedulerPage() {
-  const [algorithm, setAlgorithm] = useState('FCFS');
-  const [jobs, setJobs] = useState([]);
-  const [apps, setApps] = useState([]);
+  const [strategy, setStrategy] = useState('FCFS');
+  const [running, setRunning] = useState(false);
+  const [sampleJobs, setSampleJobs] = useState([
+    { id: 'J1', name: 'payment-deploy', burst: 25, priority: 2, arrival: 0 },
+    { id: 'J2', name: 'auth-build', burst: 12, priority: 1, arrival: 2 },
+    { id: 'J3', name: 'cache-restart', burst: 8, priority: 4, arrival: 5 },
+    { id: 'J4', name: 'indexer-task', burst: 30, priority: 3, arrival: 6 },
+  ]);
+
   const [scheduledSequence, setScheduledSequence] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [runningSimulation, setRunningSimulation] = useState(false);
+  const [currentExecuting, setCurrentExecuting] = useState(null);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [jobsData, appsData] = await Promise.all([
-        mockData.getJobs(),
-        mockData.getApplications(),
-      ]);
-      setJobs(jobsData);
-      setApps(appsData);
-    } catch (err) {
-      console.error('Failed to load scheduler data', err);
-    } finally {
-      setLoading(false);
+  const runSimulation = () => {
+    setRunning(true);
+    let ordered = [];
+
+    if (strategy === 'SJF') {
+      // Shortest Job First: Sort primarily by burst time
+      ordered = [...sampleJobs].sort((a, b) => a.burst - b.burst);
+    } else if (strategy === 'PRIORITY') {
+      // Priority: Higher numerical priority executed first
+      ordered = [...sampleJobs].sort((a, b) => b.priority - a.priority);
+    } else {
+      // FCFS: First Come First Served: Order by arrival time
+      ordered = [...sampleJobs].sort((a, b) => a.arrival - b.arrival);
     }
+
+    setScheduledSequence(ordered);
+
+    // Animate execution through the pipeline
+    ordered.forEach((job, idx) => {
+      setTimeout(() => {
+        setCurrentExecuting(job.id);
+      }, idx * 800);
+    });
+
+    setTimeout(() => {
+      setCurrentExecuting(null);
+      setRunning(false);
+    }, ordered.length * 800 + 400);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleRunSimulation = async () => {
-    try {
-      setRunningSimulation(true);
-      const res = await mockData.runScheduler(algorithm);
-      setScheduledSequence(res);
-    } catch (err) {
-      console.error('Failed simulation', err);
-    } finally {
-      setRunningSimulation(false);
-    }
-  };
-
-  const getAppName = (appId) => {
-    const found = apps.find(a => a.id === appId);
-    return found ? found.name : `App #${appId}`;
-  };
-
-  const queuedJobs = jobs.filter(j => ['QUEUED', 'SCHEDULED'].includes(j.status));
-
-  const algoDescriptions = {
-    FCFS: 'First-Come, First-Served processes jobs in order of arrival time. Fair and deterministic for sequential batch tasks.',
-    SJF: 'Shortest Job First prioritizes tasks with the lowest estimated burst time, minimizing overall average wait time.',
-    PRIORITY: 'Priority scheduling handles high-urgency operations (P5 down to P1) first, essential for production deployments.',
+  const codeSnippets = {
+    FCFS: `// FcfsSchedulingStrategy.java
+@Override
+public WorkloadJob getNextJob(List<WorkloadJob> jobs) {
+    return jobs.stream()
+        .min(Comparator.comparing(WorkloadJob::getArrivalTime))
+        .orElse(null);
+}`,
+    PRIORITY: `// PrioritySchedulingStrategy.java
+@Override
+public WorkloadJob getNextJob(List<WorkloadJob> jobs) {
+    return jobs.stream()
+        .max(Comparator.comparing(WorkloadJob::getPriority))
+        .orElse(null);
+}`,
+    SJF: `// SjfSchedulingStrategy.java
+@Override
+public WorkloadJob getNextJob(List<WorkloadJob> jobs) {
+    return jobs.stream()
+        .min(Comparator.comparing(WorkloadJob::getBurstTime))
+        .orElse(null);
+}`,
   };
 
   return (
-    <div className="scheduler-page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Job Scheduling Engine</h1>
-          <p className="page-subtitle">Configure scheduling policies and observe dynamic queue dispatcher execution</p>
+    <div style={{ maxWidth: 1100 }}>
+      <div className="services-header">
+        <div className="services-title-group">
+          <h1>Workload Scheduling Engine</h1>
+          <p>
+            Interactive simulator of the backend Spring Boot scheduling algorithms (`com.backend.scheduler.strategy`).
+          </p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={handleRunSimulation}
-          disabled={runningSimulation || queuedJobs.length === 0}
-        >
-          {runningSimulation ? (
-            <RotateCw className="spinner" size={16} />
+
+        <button className="btn btn-primary" onClick={runSimulation} disabled={running}>
+          {running ? (
+            <>
+              <div className="spinner" style={{ width: 14, height: 14 }} /> Scheduling Jobs...
+            </>
           ) : (
-            <Play size={16} />
+            <>
+              <Play size={15} /> Run Simulation
+            </>
           )}
-          Run {algorithm} Simulation
         </button>
       </div>
 
-      <div className="card" style={{ marginBottom: '24px' }}>
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Algorithm Policy</h2>
-            <p className="card-subtitle">Select the CPU-inspired job dispatcher policy</p>
+      {/* Algorithm Selector Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div
+          className="render-card interactive"
+          style={{
+            borderColor: strategy === 'FCFS' ? 'var(--mint)' : 'var(--border-default)',
+            background: strategy === 'FCFS' ? 'rgba(70, 227, 183, 0.05)' : 'var(--bg-panel)',
+          }}
+          onClick={() => setStrategy('FCFS')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, color: '#fff', fontSize: '1rem' }}>FCFS</span>
+            <span className="type-badge">First Come First Served</span>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['FCFS', 'SJF', 'PRIORITY'].map((algo) => (
-              <button
-                key={algo}
-                className={`btn ${algorithm === algo ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => {
-                  setAlgorithm(algo);
-                  setScheduledSequence([]);
-                }}
-              >
-                {algo}
-              </button>
-            ))}
-          </div>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Fair chronological dispatch queue based purely on task enqueue arrival timestamp.
+          </p>
         </div>
-        <div style={{ padding: '0 24px 20px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-          <Info size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-          <span>{algoDescriptions[algorithm]}</span>
+
+        <div
+          className="render-card interactive"
+          style={{
+            borderColor: strategy === 'PRIORITY' ? 'var(--mint)' : 'var(--border-default)',
+            background: strategy === 'PRIORITY' ? 'rgba(70, 227, 183, 0.05)' : 'var(--bg-panel)',
+          }}
+          onClick={() => setStrategy('PRIORITY')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, color: '#fff', fontSize: '1rem' }}>Priority Scheduling</span>
+            <span className="type-badge" style={{ color: 'var(--accent-purple)' }}>High Priority First</span>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Urgent production and hotfix builds preempt standard automated test jobs.
+          </p>
+        </div>
+
+        <div
+          className="render-card interactive"
+          style={{
+            borderColor: strategy === 'SJF' ? 'var(--mint)' : 'var(--border-default)',
+            background: strategy === 'SJF' ? 'rgba(70, 227, 183, 0.05)' : 'var(--bg-panel)',
+          }}
+          onClick={() => setStrategy('SJF')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, color: '#fff', fontSize: '1rem' }}>Shortest Job First (SJF)</span>
+            <span className="type-badge" style={{ color: 'var(--status-deploying)' }}>Min Burst Time</span>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Minimizes average cluster waiting time by executing lightweight builds first.
+          </p>
         </div>
       </div>
 
-      <div className="content-grid">
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Pending Jobs in Pool</h2>
-              <p className="card-subtitle">{queuedJobs.length} tasks ready for scheduling</p>
-            </div>
-            <Layers size={18} style={{ color: 'var(--text-tertiary)' }} />
-          </div>
+      {/* Execution Pipeline Visualizer */}
+      <div className="render-card" style={{ marginBottom: 24, padding: '24px 28px' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff', marginBottom: 6 }}>
+          Cluster Execution Timeline ({strategy})
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 20 }}>
+          Watch Docker containers spin up in order determined by {strategy} scheduling algorithm.
+        </p>
 
-          {loading ? (
-            <div className="loading-page">
-              <div className="spinner"></div>
-            </div>
-          ) : queuedJobs.length === 0 ? (
-            <div className="empty-state">
-              <Activity size={36} style={{ color: 'var(--text-tertiary)', marginBottom: '8px' }} />
-              <p>No queued jobs currently in the pool</p>
-            </div>
-          ) : (
-            <div className="scheduler-queue" style={{ padding: '0 24px 24px' }}>
-              {queuedJobs.map((job) => (
-                <div key={job.id} className="scheduler-job">
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="scheduler-job-name">{getAppName(job.applicationId)}</span>
-                      <span
-                        style={{
-                          fontSize: '0.72rem',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          background: 'var(--bg-elevated)',
-                          color: 'var(--text-secondary)',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {job.jobType}
+        {scheduledSequence.length === 0 ? (
+          <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+            Click &ldquo;Run Simulation&rdquo; above to animate the scheduling pipeline.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflowX: 'auto', paddingBottom: 10 }}>
+            {scheduledSequence.map((job, idx) => {
+              const isExec = currentExecuting === job.id;
+              return (
+                <div key={job.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    className="render-card"
+                    style={{
+                      minWidth: 180,
+                      padding: 14,
+                      borderColor: isExec ? 'var(--mint)' : 'var(--border-default)',
+                      background: isExec ? 'rgba(70, 227, 183, 0.1)' : 'var(--bg-canvas)',
+                      boxShadow: isExec ? '0 0 20px rgba(70, 227, 183, 0.25)' : 'none',
+                      transform: isExec ? 'scale(1.03)' : 'scale(1)',
+                      transition: 'all 200ms ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontWeight: 700, color: 'var(--mint)', fontFamily: 'var(--font-mono)' }}>
+                        #{idx + 1} &middot; {job.id}
                       </span>
+                      <span className="type-badge">P{job.priority}</span>
                     </div>
-                    <div className="scheduler-job-meta" style={{ marginTop: '4px' }}>
-                      Priority: P{job.priority} &bull; Burst: {job.burstTime}s &bull; Arrived: {new Date(job.arrivalTime).toLocaleTimeString()}
+
+                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.88rem' }}>{job.name}</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+                      Burst: {job.burst}s &middot; Arr: T+{job.arrival}s
                     </div>
                   </div>
-                  <span className="status-badge status-created">#{job.id}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Simulated Dispatch Order</h2>
-              <p className="card-subtitle">Evaluated order according to {algorithm}</p>
-            </div>
-            <Sparkles size={18} style={{ color: 'var(--accent-primary)' }} />
+                  {idx < scheduledSequence.length - 1 && (
+                    <ArrowRight size={18} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                  )}
+                </div>
+              );
+            })}
           </div>
+        )}
+      </div>
 
-          {scheduledSequence.length === 0 ? (
-            <div className="empty-state" style={{ minHeight: '260px' }}>
-              <Cpu size={36} style={{ color: 'var(--text-tertiary)', marginBottom: '8px' }} />
-              <p>Click &quot;Run {algorithm} Simulation&quot; above to execute the dispatch calculation</p>
-            </div>
-          ) : (
-            <div className="scheduler-queue" style={{ padding: '0 24px 24px' }}>
-              {scheduledSequence.map((job, idx) => (
-                <div key={job.id} className="scheduler-job" style={{ borderColor: idx === 0 ? 'var(--accent-primary)' : 'var(--border-subtle)' }}>
-                  <div className="scheduler-job-order">#{idx + 1}</div>
-                  <div className="scheduler-job-info">
-                    <div className="scheduler-job-name">
-                      {getAppName(job.applicationId)} — <span style={{ color: 'var(--accent-primary-hover)' }}>{job.jobType}</span>
-                    </div>
-                    <div className="scheduler-job-meta">
-                      Priority: P{job.priority} &bull; Est. Duration: {job.burstTime}s
-                    </div>
-                  </div>
-                  <ArrowRight size={14} style={{ color: 'var(--text-tertiary)' }} />
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Java Backend Source Code Preview */}
+      <div className="render-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Code2 size={16} className="text-mint" />
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#fff' }}>
+            Active Backend Java Implementation
+          </h3>
         </div>
+
+        <pre
+          style={{
+            background: 'var(--bg-terminal)',
+            padding: 18,
+            borderRadius: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.85rem',
+            color: '#a78bfa',
+            overflowX: 'auto',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          {codeSnippets[strategy]}
+        </pre>
       </div>
     </div>
   );

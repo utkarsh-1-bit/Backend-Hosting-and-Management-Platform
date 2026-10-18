@@ -1,381 +1,274 @@
-import { useState, useEffect } from 'react';
-import { mockData } from '../services/mockData';
+import { useState, useEffect, useCallback } from 'react';
+import { appApi } from '../services/api';
 import {
-  CalendarClock,
-  Play,
+  Layers,
   RotateCcw,
-  Hammer,
-  AlertCircle,
-  Plus,
-  X,
   Clock,
-  CheckCircle2,
+  CheckCircle,
+  AlertCircle,
+  Cpu,
+  Search,
+  Zap,
+  Server,
+  Play,
   XCircle,
-  Hourglass,
-  Layers
 } from 'lucide-react';
 
 export default function JobsPage() {
-  const [jobs, setJobs] = useState([]);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState('ALL');
+  const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('ALL');
-  const [showModal, setShowModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [formData, setFormData] = useState({
-    applicationId: '',
-    jobType: 'BUILD',
-    priority: 2,
-    burstTime: 30,
-  });
-
-  const loadData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      const [jobsData, appsData] = await Promise.all([
-        mockData.getJobs(),
-        mockData.getApplications(),
-      ]);
-      setJobs(jobsData);
-      setApps(appsData);
-      if (appsData.length > 0 && !formData.applicationId) {
-        setFormData(prev => ({ ...prev, applicationId: appsData[0].id }));
-      }
+      const userId = JSON.parse(localStorage.getItem('hostex_user') || '{}').id || 1;
+      const data = await appApi.getByUser(userId);
+      setApps(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Failed to load jobs', err);
+      console.error('Failed to load deployments:', err);
+      setError(err.message || 'Failed to connect to backend.');
+      setApps([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  const handleCreateJob = async (e) => {
-    e.preventDefault();
-    if (!formData.applicationId) return;
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    try {
-      setSubmitting(true);
-      await mockData.createJob({
-        applicationId: Number(formData.applicationId),
-        jobType: formData.jobType,
-        priority: Number(formData.priority),
-        burstTime: Number(formData.burstTime) || 30,
-      });
-      setShowModal(false);
-      await loadData();
-    } catch (err) {
-      console.error('Failed to create job', err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  // Map applications to a deployments/jobs view
+  const deployments = apps.map((app) => ({
+    id: app.id,
+    appName: app.name,
+    repositoryUrl: app.repositoryUrl,
+    branch: app.branch || 'main',
+    status: app.status,
+    jobType: 'DEPLOY',
+    priority: 1,
+    updatedAt: app.updatedAt,
+    createdAt: app.createdAt,
+  }));
 
-  const handleCancelJob = async (id) => {
-    try {
-      await mockData.cancelJob(id);
-      await loadData();
-    } catch (err) {
-      console.error('Failed to cancel job', err);
-    }
-  };
-
-  const getAppName = (appId) => {
-    const found = apps.find(a => a.id === appId);
-    return found ? found.name : `App #${appId}`;
-  };
-
-  const getJobTypeIcon = (type) => {
-    switch (type) {
-      case 'BUILD':
-        return <Hammer size={15} style={{ color: 'var(--accent-secondary)' }} />;
-      case 'DEPLOY':
-        return <Play size={15} style={{ color: 'var(--success)' }} />;
-      case 'RESTART':
-        return <RotateCcw size={15} style={{ color: 'var(--warning)' }} />;
-      default:
-        return <CalendarClock size={15} />;
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'COMPLETED':
-        return <span className="status-badge status-running"><CheckCircle2 size={12} /> Completed</span>;
-      case 'RUNNING':
-        return <span className="status-badge status-deploying"><Clock size={12} /> Running</span>;
-      case 'QUEUED':
-        return <span className="status-badge status-created"><Hourglass size={12} /> Queued</span>;
-      case 'SCHEDULED':
-        return <span className="status-badge status-created"><Layers size={12} /> Scheduled</span>;
-      case 'CANCELLED':
-        return <span className="status-badge status-stopped"><XCircle size={12} /> Cancelled</span>;
-      default:
-        return <span className="status-badge status-stopped">{status}</span>;
-    }
-  };
-
-  const filteredJobs = jobs.filter(j => {
-    if (filterType !== 'ALL' && j.jobType !== filterType) return false;
-    if (filterStatus !== 'ALL' && j.status !== filterStatus) return false;
-    return true;
+  const filteredDeployments = deployments.filter((job) => {
+    const statusMap = {
+      RUNNING: 'RUNNING',
+      BUILDING: 'RUNNING',
+      DEPLOYING: 'RUNNING',
+      COMPLETED: 'COMPLETED',
+      READY: 'COMPLETED',
+      FAILED: 'FAILED',
+      STOPPED: 'FAILED',
+      CREATED: 'QUEUED',
+      QUEUED: 'QUEUED',
+    };
+    const normalizedStatus = statusMap[job.status?.toUpperCase()] || 'QUEUED';
+    const matchesStatus = filterStatus === 'ALL' || normalizedStatus === filterStatus;
+    const matchesSearch =
+      (job.appName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (job.repositoryUrl || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(job.id).includes(searchQuery);
+    return matchesStatus && matchesSearch;
   });
 
-  const stats = {
-    total: jobs.length,
-    running: jobs.filter(j => j.status === 'RUNNING').length,
-    queued: jobs.filter(j => ['QUEUED', 'SCHEDULED'].includes(j.status)).length,
-    completed: jobs.filter(j => j.status === 'COMPLETED').length,
+  const getStatusPill = (status) => {
+    const s = (status || '').toUpperCase();
+    if (s === 'RUNNING' || s === 'BUILDING' || s === 'DEPLOYING') return 'deploying';
+    if (s === 'READY') return 'live';
+    if (s === 'FAILED' || s === 'STOPPED' || s === 'ERROR') return 'failed';
+    if (s === 'CREATED' || s === 'QUEUED') return 'queued';
+    return 'queued';
+  };
+
+  const getStatusLabel = (status) => {
+    const s = (status || '').toUpperCase();
+    if (s === 'RUNNING' || s === 'BUILDING' || s === 'DEPLOYING') return 'In Progress';
+    if (s === 'READY') return 'Completed';
+    if (s === 'FAILED' || s === 'ERROR') return 'Failed';
+    if (s === 'STOPPED') return 'Stopped';
+    return status || 'Queued';
   };
 
   return (
-    <div className="jobs-page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Workload Jobs</h1>
-          <p className="page-subtitle">Track, dispatch, and manage asynchronous deployment and build tasks</p>
+    <div>
+      <div className="services-header">
+        <div className="services-title-group">
+          <h1>Deployments</h1>
+          <p>
+            Track deployment history and workload execution across all your services. Scheduled via FCFS, Priority, and SJF algorithms.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} />
-          Create Job
-        </button>
-      </div>
 
-      <div className="stats-grid" style={{ marginBottom: '24px' }}>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <span className="stat-card-title">Total Jobs</span>
-            <div className="stat-card-icon stat-icon-blue"><CalendarClock size={16} /></div>
-          </div>
-          <div className="stat-card-value">{stats.total}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <span className="stat-card-title">In Progress</span>
-            <div className="stat-card-icon stat-icon-amber"><Clock size={16} /></div>
-          </div>
-          <div className="stat-card-value">{stats.running}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <span className="stat-card-title">Queued / Scheduled</span>
-            <div className="stat-card-icon stat-icon-purple"><Hourglass size={16} /></div>
-          </div>
-          <div className="stat-card-value">{stats.queued}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <span className="stat-card-title">Completed</span>
-            <div className="stat-card-icon stat-icon-green"><CheckCircle2 size={16} /></div>
-          </div>
-          <div className="stat-card-value">{stats.completed}</div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="btn btn-secondary btn-sm" onClick={fetchData} title="Refresh deployments">
+            <RotateCcw size={14} className={loading ? 'spinning' : ''} />
+            <span>Refresh</span>
+          </button>
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h2 className="card-title">Job Execution Queue</h2>
-            <p className="card-subtitle">Active and historic background executions</p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <select
-              className="form-control"
-              style={{ width: 'auto', padding: '6px 12px' }}
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-            >
-              <option value="ALL">All Types</option>
-              <option value="BUILD">Build Jobs</option>
-              <option value="DEPLOY">Deploy Jobs</option>
-              <option value="RESTART">Restart Jobs</option>
-            </select>
-            <select
-              className="form-control"
-              style={{ width: 'auto', padding: '6px 12px' }}
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="QUEUED">Queued</option>
-              <option value="RUNNING">Running</option>
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="CANCELLED">Cancelled</option>
-            </select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="loading-page">
-            <div className="spinner spinner-lg"></div>
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="empty-state">
-            <CalendarClock size={40} style={{ color: 'var(--text-tertiary)', marginBottom: '12px' }} />
-            <p>No jobs found matching the selected filter</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Job ID</th>
-                  <th>Application</th>
-                  <th>Type</th>
-                  <th>Priority</th>
-                  <th>Burst Time</th>
-                  <th>Arrival Time</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredJobs.map((job) => (
-                  <tr key={job.id}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>#{job.id}</td>
-                    <td style={{ fontWeight: 550, color: 'var(--text-primary)' }}>
-                      {getAppName(job.applicationId)}
-                    </td>
-                    <td>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {getJobTypeIcon(job.jobType)}
-                        <span>{job.jobType}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--radius-sm)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          backgroundColor:
-                            job.priority >= 3
-                              ? 'var(--danger-muted)'
-                              : job.priority === 2
-                              ? 'var(--warning-muted)'
-                              : 'var(--info-muted)',
-                          color:
-                            job.priority >= 3
-                              ? 'var(--danger)'
-                              : job.priority === 2
-                              ? 'var(--warning)'
-                              : 'var(--info)',
-                        }}
-                      >
-                        P{job.priority}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{job.burstTime ? `${job.burstTime}s` : '—'}</td>
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
-                      {job.arrivalTime ? new Date(job.arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
-                    </td>
-                    <td>{getStatusBadge(job.status)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {['QUEUED', 'SCHEDULED'].includes(job.status) && (
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--danger)' }}
-                          onClick={() => handleCancelJob(job.id)}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {showModal && (
-        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Create Workload Job</h3>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
-                <X size={18} />
-              </button>
+      {/* Scheduler Algorithm Info */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+        {[
+          { name: 'FCFS', label: 'First Come First Served', desc: 'Jobs dispatched in arrival order', color: 'var(--mint)' },
+          { name: 'PRIORITY', label: 'Priority Scheduling', desc: 'High priority jobs execute first', color: 'var(--accent-purple)' },
+          { name: 'SJF', label: 'Shortest Job First', desc: 'Minimizes average wait time', color: 'var(--status-deploying)' },
+        ].map((algo) => (
+          <div
+            key={algo.name}
+            className="render-card"
+            style={{ padding: '16px 20px', borderLeft: `3px solid ${algo.color}` }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Cpu size={14} style={{ color: algo.color }} />
+              <span style={{ fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}>{algo.name}</span>
             </div>
-            <form onSubmit={handleCreateJob}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Target Application</label>
-                  <select
-                    className="form-control"
-                    value={formData.applicationId}
-                    onChange={(e) => setFormData({ ...formData, applicationId: e.target.value })}
-                    required
-                  >
-                    {apps.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.status})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Job Type</label>
-                    <select
-                      className="form-control"
-                      value={formData.jobType}
-                      onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
-                    >
-                      <option value="BUILD">BUILD</option>
-                      <option value="DEPLOY">DEPLOY</option>
-                      <option value="RESTART">RESTART</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Priority (1: Low to 5: High)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="5"
-                      className="form-control"
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Estimated Burst Time (seconds)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="600"
-                    className="form-control"
-                    value={formData.burstTime}
-                    onChange={(e) => setFormData({ ...formData, burstTime: e.target.value })}
-                    required
-                  />
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '4px', display: 'block' }}>
-                    Used by SJF (Shortest Job First) and FCFS algorithms for optimal scheduling.
-                  </span>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Submit Job'}
-                </button>
-              </div>
-            </form>
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: algo.color, marginBottom: 4 }}>{algo.label}</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{algo.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Error Banner */}
+      {error && !loading && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+            padding: '14px 18px',
+            background: 'rgba(244, 63, 94, 0.08)',
+            border: '1px solid rgba(244, 63, 94, 0.25)',
+            borderRadius: 8,
+            marginBottom: 20,
+            color: 'var(--accent-rose)',
+            fontSize: '0.88rem',
+          }}
+        >
+          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong>Backend Connection Failed</strong>
+            <div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>{error}</div>
           </div>
         </div>
       )}
+
+      {/* Filter Bar */}
+      <div className="services-filter-bar">
+        <div className="search-wrapper" style={{ flex: 1, minWidth: 260 }}>
+          <Search size={15} className="search-icon" />
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search deployments by service name or ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="filter-pills">
+          {['ALL', 'RUNNING', 'COMPLETED', 'QUEUED', 'FAILED'].map((st) => (
+            <button
+              key={st}
+              className={`filter-pill-btn ${filterStatus === st ? 'active' : ''}`}
+              onClick={() => setFilterStatus(st)}
+            >
+              {st}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Deployments Table */}
+      <div className="render-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table className="env-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Service</th>
+              <th>Branch</th>
+              <th>Job Type</th>
+              <th>Status</th>
+              <th>Scheduler</th>
+              <th style={{ textAlign: 'right' }}>Last Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>
+                  <div className="spinner" />
+                  <div style={{ marginTop: 8, color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+                    Connecting to backend...
+                  </div>
+                </td>
+              </tr>
+            ) : filteredDeployments.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>
+                  {error ? 'Backend unavailable. Start the Spring Boot server on port 8080.' : 'No deployments found.'}
+                </td>
+              </tr>
+            ) : (
+              filteredDeployments.map((job) => {
+                const pillClass = getStatusPill(job.status);
+                const isActive = pillClass === 'deploying';
+
+                return (
+                  <tr key={job.id}>
+                    <td>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--mint)' }}>
+                        #{job.id}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Server size={14} style={{ color: 'var(--text-tertiary)' }} />
+                        <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.88rem' }}>
+                          {job.appName || `app-${job.id}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {job.branch}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="type-badge">{job.jobType}</span>
+                    </td>
+                    <td>
+                      <span className={`status-pill ${pillClass}`}>
+                        <span className={`status-dot ${isActive ? 'pulsing' : ''}`} />
+                        {getStatusLabel(job.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>
+                        <Zap size={12} /> FCFS
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                        {job.updatedAt
+                          ? new Date(job.updatedAt).toLocaleString([], {
+                              month: 'short', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })
+                          : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
