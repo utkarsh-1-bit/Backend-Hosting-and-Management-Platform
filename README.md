@@ -188,8 +188,6 @@ application_id	Associated application
 key	Configuration variable name
 value	Configuration value
 
-Note: These tables represent the proposed logical schema. Adjust field names and relationships to match the actual database implementation.
-
 ⚙️ CPU Scheduling Algorithms
 
 The platform incorporates CPU scheduling algorithms to demonstrate how workloads can be selected and ordered for execution.
