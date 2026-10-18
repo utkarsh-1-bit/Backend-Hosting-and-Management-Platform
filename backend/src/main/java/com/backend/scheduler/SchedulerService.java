@@ -55,6 +55,8 @@ public class SchedulerService {
 
         jobService.scheduleJob(job.getId());
 
+        System.out.println("Execution Started");
+
         workloadExecutor.execute(job);
     }
 }

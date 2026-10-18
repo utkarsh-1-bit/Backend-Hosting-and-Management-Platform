@@ -13,9 +13,23 @@ public class WorkloadScheduler {
         this.schedulerService = schedulerService;
     }
 
-    @Scheduled(fixedDelay = 5000)
-    public void processNextJob() {
+    private boolean isProcessing = false;
 
-        schedulerService.scheduleNextJob();
+    @Scheduled(fixedDelay = 5000)
+    public synchronized void processNextJob() {
+
+        if (isProcessing) {
+            return;
+        }
+
+        try {
+            isProcessing = true;
+
+            schedulerService.scheduleNextJob();
+
+        } finally {
+            isProcessing = false;
+        }
     }
+
 }

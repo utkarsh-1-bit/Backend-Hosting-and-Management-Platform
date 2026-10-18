@@ -193,9 +193,9 @@ public class ApplicationService {
 
         Application application = findById(id);
 
-        if (!"READY".equals(application.getStatus())) {
-            throw new IllegalStateException(
-                    "Application is not ready");
+        if (!"CREATED".equals(application.getStatus()) &&
+                !"READY".equals(application.getStatus())) {
+            throw new IllegalStateException("Application cannot be started");
         }
 
         WorkloadJob job = new WorkloadJob();

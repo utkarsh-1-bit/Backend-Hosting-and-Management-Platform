@@ -99,6 +99,8 @@ public class WorkloadExecutor {
             applicationService.updateStatus(
                     app.getId(), "RUNNING");
 
+            System.out.println("\nApp started");
+
             jobService.completeJob(job.getId());
 
         } catch (Exception e) {
@@ -108,6 +110,7 @@ public class WorkloadExecutor {
 
             jobService.failJob(job.getId());
 
+            System.out.println("Job failed");
         }
     }
 
