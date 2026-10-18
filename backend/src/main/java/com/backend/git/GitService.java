@@ -4,10 +4,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Comparator;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 
 @Service
 public class GitService {
@@ -54,16 +57,16 @@ public class GitService {
 
             Process process = processBuilder.start();
 
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(
-                            process.getInputStream()));
-
             StringBuilder output = new StringBuilder();
 
-            String line;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
 
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+                String line;
+
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
             }
 
             int exitCode = process.waitFor();
@@ -79,7 +82,8 @@ public class GitService {
 
         } catch (Exception e) {
             throw new RuntimeException(
-                    "Failed to clone repository",
+                    "Failed to clone repository for application "
+                            + applicationId + ": " + e.getMessage(),
                     e);
         }
     }
@@ -98,29 +102,58 @@ public class GitService {
     }
 
     private void deleteDirectory(Path directory) {
+        if (!Files.exists(directory)) {
+            return;
+        }
 
         try {
-            if (!Files.exists(directory)) {
-                return;
+            Process process = new ProcessBuilder(
+                    "cmd.exe",
+                    "/c",
+                    "attrib",
+                    "-R", "-S", "-H",
+                    directory.toString() + "\\*",
+                    "/S", "/D").redirectErrorStream(true).start();
+
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                throw new IOException(
+                        "Failed to remove file attributes from " + directory);
             }
 
-            try (var paths = Files.walk(directory)) {
-                paths.sorted(Comparator.reverseOrder())
-                        .forEach(path -> {
-                            try {
-                                Files.delete(path);
-                            } catch (Exception e) {
-                                throw new RuntimeException(
-                                        "Failed to delete: " + path,
-                                        e);
-                            }
-                        });
-            }
+            Files.walkFileTree(directory, new SimpleFileVisitor<>() {
 
-        } catch (Exception e) {
+                @Override
+                public FileVisitResult visitFile(
+                        Path file,
+                        BasicFileAttributes attributes) throws IOException {
+
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(
+                        Path dir,
+                        IOException exception) throws IOException {
+
+                    if (exception != null) {
+                        throw exception;
+                    }
+
+                    Files.delete(dir);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+
+        } catch (IOException e) {
             throw new RuntimeException(
-                    "Failed to delete workspace",
-                    e);
+                    "Failed to delete workspace: " + directory, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(
+                    "Interrupted while deleting workspace: " + directory, e);
         }
     }
 }
