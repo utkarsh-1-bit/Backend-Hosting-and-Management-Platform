@@ -38,7 +38,7 @@ public class DockerRuntime implements Runtime {
                 "-d",
                 "-p",
                 hostPort + ":" + containerPort,
-                imageName);
+                imageName).trim();
     }
 
     @Override

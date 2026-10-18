@@ -7,40 +7,40 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
+import java.util.Comparator;
 
 @Service
 public class GitService {
 
-    private final String workspaceDirectory = "mini-render-workspaces";
+    private final Path workspaceDirectory = Paths.get("hostex-workspaces").toAbsolutePath();
 
     public String cloneRepository(
+            Long applicationId,
             String repositoryUrl,
             String branch) {
 
-        if (repositoryUrl == null ||
-                repositoryUrl.isBlank()) {
+        if (applicationId == null) {
+            throw new IllegalArgumentException(
+                    "Application ID is required");
+        }
 
+        if (repositoryUrl == null || repositoryUrl.isBlank()) {
             throw new IllegalArgumentException(
                     "Repository URL is required");
         }
 
-        if (branch == null ||
-                branch.isBlank()) {
-
+        if (branch == null || branch.isBlank()) {
             throw new IllegalArgumentException(
                     "Git branch is required");
         }
 
         try {
+            Files.createDirectories(workspaceDirectory);
 
-            Path workspace = Paths.get(workspaceDirectory);
+            Path repositoryPath = workspaceDirectory.resolve(
+                    "app-" + applicationId);
 
-            Files.createDirectories(workspace);
-
-            String folderName = UUID.randomUUID().toString();
-
-            Path repositoryPath = workspace.resolve(folderName);
+            deleteDirectory(repositoryPath);
 
             ProcessBuilder processBuilder = new ProcessBuilder(
                     "git",
@@ -69,20 +69,57 @@ public class GitService {
             int exitCode = process.waitFor();
 
             if (exitCode != 0) {
+                deleteDirectory(repositoryPath);
 
                 throw new RuntimeException(
-                        "Git clone failed: "
-                                + output);
+                        "Git clone failed: " + output);
             }
 
-            return repositoryPath
-                    .toAbsolutePath()
-                    .toString();
+            return repositoryPath.toString();
 
         } catch (Exception e) {
-
             throw new RuntimeException(
                     "Failed to clone repository",
+                    e);
+        }
+    }
+
+    public void deleteWorkspace(Long applicationId) {
+
+        if (applicationId == null) {
+            throw new IllegalArgumentException(
+                    "Application ID is required");
+        }
+
+        Path repositoryPath = workspaceDirectory.resolve(
+                "app-" + applicationId);
+
+        deleteDirectory(repositoryPath);
+    }
+
+    private void deleteDirectory(Path directory) {
+
+        try {
+            if (!Files.exists(directory)) {
+                return;
+            }
+
+            try (var paths = Files.walk(directory)) {
+                paths.sorted(Comparator.reverseOrder())
+                        .forEach(path -> {
+                            try {
+                                Files.delete(path);
+                            } catch (Exception e) {
+                                throw new RuntimeException(
+                                        "Failed to delete: " + path,
+                                        e);
+                            }
+                        });
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to delete workspace",
                     e);
         }
     }

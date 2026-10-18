@@ -10,6 +10,7 @@ import com.backend.model.WorkloadJob;
 
 import com.backend.exception.DuplicateResourceException;
 import com.backend.exception.ResourceNotFoundException;
+import com.backend.git.GitService;
 
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -22,19 +23,22 @@ public class ApplicationService {
     private final ContainerService containerService;
     private final EnvironmentVariableService variableService;
     private final Runtime runtime;
+    private final GitService gitService;
 
     public ApplicationService(
             ApplicationDao applicationDao,
             WorkloadJobService jobService,
             ContainerService containerService,
             EnvironmentVariableService variableService,
-            Runtime runtime) {
+            Runtime runtime,
+            GitService gitService) {
 
         this.applicationDao = applicationDao;
         this.jobService = jobService;
         this.containerService = containerService;
         this.variableService = variableService;
         this.runtime = runtime;
+        this.gitService = gitService;
     }
 
     public Application createApplication(
@@ -150,10 +154,13 @@ public class ApplicationService {
         }
 
         // Remove application image
-        runtime.removeImage("mini-render-app-" + id);
+        runtime.removeImage("hostex-app-" + id);
 
         // Delete the application record
         applicationDao.deleteApplication(id);
+
+        // Delete the workspace
+        gitService.deleteWorkspace(id);
     }
 
     public void updateStatus(
@@ -190,6 +197,8 @@ public class ApplicationService {
     }
 
     public WorkloadJob startApplication(Long id) {
+
+        cleanupDeployment(id);
 
         Application application = findById(id);
 
@@ -242,5 +251,21 @@ public class ApplicationService {
         job.setBurstTime(5);
 
         return jobService.createJob(job);
+    }
+
+    private void cleanupDeployment(Long applicationId) {
+
+        List<Container> containers = containerService.findByApplicationId(applicationId);
+
+        for (Container container : containers) {
+
+            if ("RUNNING".equals(container.getStatus())) {
+                containerService.stopContainer(container.getId());
+            }
+
+            containerService.removeContainer(container.getId());
+        }
+
+        gitService.deleteWorkspace(applicationId);
     }
 }

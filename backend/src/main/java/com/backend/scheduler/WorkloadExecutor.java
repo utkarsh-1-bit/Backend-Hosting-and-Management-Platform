@@ -61,10 +61,11 @@ public class WorkloadExecutor {
 
             // clone repo
             String path = gitService.cloneRepository(
+                    app.getId(),
                     app.getRepositoryUrl(),
                     app.getBranch());
 
-            String imageName = "mini-render-app-" + app.getId();
+            String imageName = "hostex-app-" + app.getId();
 
             runtime.buildImage(
                     path,
@@ -75,7 +76,7 @@ public class WorkloadExecutor {
             String dockerId = runtime.createContainer(
                     imageName,
                     hostPort,
-                    5000);
+                    80);
 
             runtime.startContainer(dockerId);
 
