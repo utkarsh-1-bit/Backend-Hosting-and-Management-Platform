@@ -73,10 +73,32 @@ public class WorkloadExecutor {
 
             int hostPort = findAvailablePort();
 
+            double cpuLimit;
+            int memoryLimitMb;
+
+            switch (app.getPlan()) {
+                case "BASIC" -> {
+                    cpuLimit = 0.5;
+                    memoryLimitMb = 512;
+                }
+                case "STANDARD" -> {
+                    cpuLimit = 1.0;
+                    memoryLimitMb = 1024;
+                }
+                case "PREMIUM" -> {
+                    cpuLimit = 2.0;
+                    memoryLimitMb = 2048;
+                }
+                default -> throw new IllegalArgumentException(
+                        "Invalid hosting plan: " + app.getPlan());
+            }
+
             String dockerId = runtime.createContainer(
                     imageName,
                     hostPort,
-                    80);
+                    80,
+                    cpuLimit,
+                    memoryLimitMb);
 
             runtime.startContainer(dockerId);
 
@@ -87,7 +109,7 @@ public class WorkloadExecutor {
             container.setImageName(imageName);
             container.setStatus("RUNNING");
             container.setHostPort(hostPort);
-            container.setContainerPort(8080);
+            container.setContainerPort(80);
 
             Timestamp now = new Timestamp(
                     System.currentTimeMillis());

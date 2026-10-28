@@ -13,7 +13,10 @@ import com.backend.exception.ResourceNotFoundException;
 import com.backend.git.GitService;
 
 import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class ApplicationService {
@@ -60,6 +63,14 @@ public class ApplicationService {
             throw new DuplicateResourceException(
                     "Application name already exists");
         }
+
+        if (application.getPlan() == null ||
+                !List.of("BASIC", "STANDARD", "PREMIUM")
+                        .contains(application.getPlan().toUpperCase())) {
+            throw new IllegalArgumentException("Invalid hosting plan");
+        }
+
+        application.setPlan(application.getPlan().toUpperCase());
 
         application.setStatus("CREATED");
 
@@ -163,49 +174,22 @@ public class ApplicationService {
         gitService.deleteWorkspace(id);
     }
 
-    public void updateStatus(
-            Long id,
-            String newStatus) {
-
-        Application application = findById(id);
-
-        String current = application.getStatus();
-
-        boolean valid = ("CREATED".equals(current) &&
-                "READY".equals(newStatus)) ||
-
-                ("READY".equals(current) &&
-                        "DEPLOYING".equals(newStatus))
-                ||
-
-                ("DEPLOYING".equals(current) &&
-                        ("RUNNING".equals(newStatus) ||
-                                "READY".equals(newStatus)))
-                ||
-
-                ("RUNNING".equals(current) &&
-                        "STOPPED".equals(newStatus));
-
-        if (!valid) {
-            throw new IllegalStateException(
-                    "Invalid application status change");
-        }
+    public void updateStatus(Long id, String newStatus) {
 
         applicationDao.updateStatus(
                 id,
                 newStatus);
     }
 
-    public WorkloadJob startApplication(Long id) {
-
-        cleanupDeployment(id);
+    public WorkloadJob deployApplication(Long id) {
 
         Application application = findById(id);
 
-        if (!"CREATED".equals(application.getStatus()) &&
-                !"READY".equals(application.getStatus())) {
-            throw new IllegalStateException("Application cannot be started");
+        if ("RUNNING".equals(application.getStatus())) {
+            throw new IllegalStateException("Application is already running");
         }
+
+        cleanupDeployment(id);
 
         WorkloadJob job = new WorkloadJob();
 
@@ -215,6 +199,26 @@ public class ApplicationService {
         job.setBurstTime(10);
 
         return jobService.createJob(job);
+    }
+
+    public String startApplication(Long id) {
+
+        Application application = findById(id);
+
+        if ("RUNNING".equals(application.getStatus())) {
+            throw new IllegalStateException("Application is already running");
+        }
+
+        Container container = containerService.findByApplicationId(id).getFirst();
+
+        if (container == null) {
+            deployApplication(id);
+            return "Application will start soon";
+        } else {
+            containerService.startContainer(container.getId());
+            updateStatus(id, "RUNNING");
+            return "Application is Running";
+        }
     }
 
     public void stopApplication(Long id) {
@@ -234,7 +238,7 @@ public class ApplicationService {
         updateStatus(id, "STOPPED");
     }
 
-    public WorkloadJob restartApplication(Long id) {
+    public String restartApplication(Long id) {
 
         Application application = findById(id);
 
@@ -242,15 +246,58 @@ public class ApplicationService {
             throw new IllegalStateException(
                     "Application is not stopped");
         }
+        try {
+            Container container = containerService.findRunningByApplicationId(id);
 
-        WorkloadJob job = new WorkloadJob();
+            containerService.startContainer(
+                    container.getId());
 
-        job.setApplicationId(id);
-        job.setJobType("RESTART");
-        job.setPriority(1);
-        job.setBurstTime(5);
+            updateStatus(id, "RUNNING");
 
-        return jobService.createJob(job);
+            return "Application Restarted";
+        } catch (Exception e) {
+            throw e;
+        }
+
+    }
+
+    public Map<String, String> getResourceUsage(Long applicationId) {
+
+        Application application = findById(applicationId);
+
+        Container container = containerService
+                .findRunningByApplicationId(applicationId);
+
+        if (container == null) {
+            throw new IllegalStateException("Application is not running");
+        }
+
+        String output = runtime.getResourceUsage(
+                container.getDockerContainerId());
+
+        String[] values = output.split("\\|");
+
+        Map<String, String> usage = new HashMap<>();
+        usage.put("applicationId", String.valueOf(application.getId()));
+        usage.put("cpuUsage", values[0]);
+        usage.put("memoryUsage", values[1]);
+        usage.put("memoryPercentage", values[2]);
+
+        return usage;
+    }
+
+    public String getApplicationLogs(Long applicationId) {
+
+        findById(applicationId);
+
+        Container container = containerService
+                .findByApplicationId(applicationId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No container found for this application"));
+
+        return runtime.getLogs(container.getDockerContainerId());
     }
 
     private void cleanupDeployment(Long applicationId) {

@@ -10,7 +10,9 @@ public interface Runtime {
     String createContainer(
             String imageName,
             int hostPort,
-            int containerPort);
+            int containerPort,
+            double cpuLimit,
+            int memoryLimitMb);
 
     void startContainer(String containerId);
 
@@ -21,5 +23,7 @@ public interface Runtime {
     String getContainerStatus(String containerId);
 
     String getLogs(String containerId);
+
+    String getResourceUsage(String containerId);
 
 }

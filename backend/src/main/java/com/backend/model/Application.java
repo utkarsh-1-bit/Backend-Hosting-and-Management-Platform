@@ -5,7 +5,7 @@ import java.sql.Timestamp;
 
 @Data
 public class Application {
-    
+
     private Long id;
     private Long userId;
     private String name;
@@ -14,6 +14,8 @@ public class Application {
     private String buildCommand;
     private String startCommand;
     private String status;
+    private String plan;
     private Timestamp createdAt;
     private Timestamp updatedAt;
+
 }

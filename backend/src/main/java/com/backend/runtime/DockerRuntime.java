@@ -30,12 +30,21 @@ public class DockerRuntime implements Runtime {
     public String createContainer(
             String imageName,
             int hostPort,
-            int containerPort) {
+            int containerPort,
+            double cpuLimit,
+            int memoryLimitMb) {
+
+        if (cpuLimit <= 0 || memoryLimitMb <= 0) {
+            throw new IllegalArgumentException(
+                    "CPU and memory limits must be greater than zero");
+        }
 
         return executeCommand(
                 "docker",
                 "run",
                 "-d",
+                "--cpus=" + cpuLimit,
+                "--memory=" + memoryLimitMb + "m",
                 "-p",
                 hostPort + ":" + containerPort,
                 imageName).trim();
@@ -81,10 +90,36 @@ public class DockerRuntime implements Runtime {
 
     @Override
     public String getLogs(String containerId) {
+        String logs = executeCommand(
+                "docker", "logs",
+                "--tail", "100",
+                containerId);
 
+        return logs.lines()
+                .filter(line -> !line.contains("/docker-entrypoint.sh:") &&
+                        !line.contains("/docker-entrypoint.d/") &&
+                        !line.contains("Configuration complete; ready for start up") &&
+                        !line.contains("using the \"epoll\" event method") &&
+                        !line.contains("nginx/") &&
+                        !line.contains("built by gcc") &&
+                        !line.contains("OS: Linux") &&
+                        !line.contains("getrlimit(RLIMIT_NOFILE)") &&
+                        !line.contains("start worker process") &&
+                        !line.contains("gracefully shutting down") &&
+                        !line.contains("exiting") &&
+                        !line.contains("exited with code") &&
+                        !line.contains("signal ") &&
+                        !line.equals("1#1: exit"))
+                .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    @Override
+    public String getResourceUsage(String containerId) {
         return executeCommand(
-                "docker",
-                "logs",
+                "docker", "stats",
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}",
                 containerId);
     }
 

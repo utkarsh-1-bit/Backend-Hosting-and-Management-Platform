@@ -21,6 +21,7 @@ public class ApplicationRowMapper implements RowMapper<Application> {
         application.setBuildCommand(rs.getString("build_command"));
         application.setStartCommand(rs.getString("start_command"));
         application.setStatus(rs.getString("status"));
+        application.setPlan(rs.getString("plan"));
         application.setCreatedAt(rs.getTimestamp("created_at"));
         application.setUpdatedAt(rs.getTimestamp("updated_at"));
 

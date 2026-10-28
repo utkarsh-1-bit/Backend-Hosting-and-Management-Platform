@@ -14,8 +14,6 @@ import {
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/applications', icon: Box, label: 'Applications' },
-  { to: '/jobs', icon: CalendarClock, label: 'Workload Jobs' },
-  { to: '/scheduler', icon: Activity, label: 'Scheduler' },
 ];
 
 export default function Sidebar() {

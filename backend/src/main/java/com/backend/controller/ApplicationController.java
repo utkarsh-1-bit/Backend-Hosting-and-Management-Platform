@@ -6,6 +6,7 @@ import com.backend.service.ApplicationService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -60,30 +61,48 @@ public class ApplicationController {
         applicationService.deleteApplication(id);
     }
 
+    @PostMapping("/{id}/deploy")
+    public String deploy(@PathVariable Long id) {
+        applicationService.deployApplication(id);
+
+        return "Application will launch soon";
+    }
+
     @PostMapping("/{id}/start")
-    public Application start(
+    public ApplicationResponse start(
             @PathVariable Long id) {
 
         applicationService.startApplication(id);
 
-        return applicationService.findById(id);
+        return getById(id);
     }
 
     @PostMapping("/{id}/stop")
-    public Application stop(
+    public ApplicationResponse stop(
             @PathVariable Long id) {
 
         applicationService.stopApplication(id);
 
-        return applicationService.findById(id);
+        return getById(id);
     }
 
     @PostMapping("/{id}/restart")
-    public Application restart(
+    public ApplicationResponse restart(
             @PathVariable Long id) {
 
         applicationService.restartApplication(id);
 
-        return applicationService.findById(id);
+        return getById(id);
+    }
+
+    @GetMapping("/{id}/resources")
+    public Map<String, String> getResourceUsage(
+            @PathVariable Long id) {
+        return applicationService.getResourceUsage(id);
+    }
+
+    @GetMapping("/{id}/logs")
+    public String getApplicationLogs(@PathVariable Long id) {
+        return applicationService.getApplicationLogs(id);
     }
 }
