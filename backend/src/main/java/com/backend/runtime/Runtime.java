@@ -1,9 +1,17 @@
 package com.backend.runtime;
 
+import com.backend.model.EnvironmentVariable;
+import java.util.List;
+
 public interface Runtime {
+    default void verifyAvailable() {
+    }
+
     String buildImage(
             String sourceDirectory,
             String imageName);
+
+    List<Integer> getExposedPorts(String imageName);
 
     void removeImage(String imageName);
 
@@ -12,7 +20,9 @@ public interface Runtime {
             int hostPort,
             int containerPort,
             double cpuLimit,
-            int memoryLimitMb);
+            int memoryLimitMb,
+            String startCommand,
+            List<EnvironmentVariable> environmentVariables);
 
     void startContainer(String containerId);
 

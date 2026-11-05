@@ -15,6 +15,7 @@ public class Application {
     private String startCommand;
     private String status;
     private String plan;
+    private Integer containerPort;
     private Timestamp createdAt;
     private Timestamp updatedAt;
 

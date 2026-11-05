@@ -2,6 +2,7 @@ package com.backend.controller;
 
 import com.backend.model.EnvironmentVariable;
 import com.backend.service.EnvironmentVariableService;
+import com.backend.service.ApplicationService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -11,18 +12,26 @@ import java.util.List;
 public class EnvironmentVariableController {
 
     private final EnvironmentVariableService variableService;
+        private final ApplicationService applicationService;
 
     public EnvironmentVariableController(
-            EnvironmentVariableService variableService) {
+                        EnvironmentVariableService variableService,
+                        ApplicationService applicationService) {
 
         this.variableService = variableService;
+                this.applicationService = applicationService;
     }
 
     @PostMapping
     public EnvironmentVariable create(
             @PathVariable Long applicationId,
-            @RequestBody EnvironmentVariable variable) {
+                        @RequestBody EnvironmentVariable variable,
+                        @RequestAttribute("authenticatedUserId") Long userId) {
 
+                applicationService.assertOwnedBy(applicationId, userId);
+                if (variable == null) {
+                        throw new IllegalArgumentException("Environment variable data is required");
+                }
         variable.setApplicationId(applicationId);
 
         return variableService.createVariable(variable);
@@ -30,8 +39,10 @@ public class EnvironmentVariableController {
 
     @GetMapping
     public List<EnvironmentVariable> getAll(
-            @PathVariable Long applicationId) {
+                        @PathVariable Long applicationId,
+                        @RequestAttribute("authenticatedUserId") Long userId) {
 
+                applicationService.assertOwnedBy(applicationId, userId);
         return variableService.findByApplicationId(
                 applicationId);
     }
@@ -39,8 +50,10 @@ public class EnvironmentVariableController {
     @GetMapping("/{key}")
     public EnvironmentVariable getByKey(
             @PathVariable Long applicationId,
-            @PathVariable String key) {
+                        @PathVariable String key,
+                        @RequestAttribute("authenticatedUserId") Long userId) {
 
+                applicationService.assertOwnedBy(applicationId, userId);
         return variableService.findByKey(
                 applicationId,
                 key);
@@ -50,8 +63,13 @@ public class EnvironmentVariableController {
     public EnvironmentVariable update(
             @PathVariable Long applicationId,
             @PathVariable String key,
-            @RequestBody EnvironmentVariable variable) {
+                        @RequestBody EnvironmentVariable variable,
+                        @RequestAttribute("authenticatedUserId") Long userId) {
 
+                applicationService.assertOwnedBy(applicationId, userId);
+                if (variable == null) {
+                        throw new IllegalArgumentException("Environment variable data is required");
+                }
         EnvironmentVariable existing = variableService.findByKey(
                 applicationId, key);
 
@@ -68,8 +86,10 @@ public class EnvironmentVariableController {
     @DeleteMapping("/{key}")
     public void delete(
             @PathVariable Long applicationId,
-            @PathVariable String key) {
+                        @PathVariable String key,
+                        @RequestAttribute("authenticatedUserId") Long userId) {
 
+                applicationService.assertOwnedBy(applicationId, userId);
         variableService.deleteByKey(
                 applicationId, key);
     }

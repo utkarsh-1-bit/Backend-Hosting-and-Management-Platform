@@ -9,8 +9,7 @@ A clean, responsive management console for HosteX — a distributed backend host
 - **Live Service URL Resolution**: Automatically links to running Docker container host ports dynamically allocated by the backend runtime.
 - **Environment Variable Configuration**: Key-value store management for runtime container injection (`/api/applications/{id}/env`).
 - **Workload Scheduler Simulation**: Interactive visualization of CPU scheduling algorithms (First-Come First-Served, Shortest Job First, Priority Scheduling) matching the backend scheduling strategies.
-- **System Diagnostics**: Real-time ping and health check monitoring connectivity to the Spring Boot REST API (`http://localhost:8080`).
-- **Resilient Offline Fallback**: Graceful local preview mode if the backend or database is temporarily offline during evaluation.
+- **System Diagnostics**: Live API and MySQL health checks against the Spring Boot backend.
 
 ## Technology Stack
 
@@ -28,10 +27,10 @@ npm install
 ```
 
 ### 2. Configure Environment (Optional)
-By default, the Vite development server proxies all `/api` requests to `http://localhost:8080`.
+By default, the Vite development server proxies all `/api` requests to `http://localhost:8081`.
 To specify an alternate backend endpoint, create a `.env` file:
 ```env
-VITE_API_URL=http://localhost:8080
+VITE_API_URL=http://localhost:8081
 ```
 
 ### 3. Run Development Server

@@ -57,10 +57,10 @@ public class WorkloadJobDao {
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new WorkloadJobRowMapper(),
-                id);
+        return jdbcTemplate.query(sql, new WorkloadJobRowMapper(), id)
+            .stream()
+            .findFirst()
+            .orElse(null);
     }
 
     public List<WorkloadJob> findByApplicationId(Long applicationId) {
@@ -79,6 +79,21 @@ public class WorkloadJobDao {
                 sql,
                 new WorkloadJobRowMapper(),
                 applicationId);
+    }
+
+    public List<WorkloadJob> findByUserId(Long userId) {
+        String sql = """
+                SELECT j.id, j.application_id,
+                       j.job_type, j.status, j.priority,
+                       j.arrival_time, j.burst_time,
+                       j.start_time, j.completion_time
+                FROM workload_jobs j
+                JOIN applications a ON a.id = j.application_id
+                WHERE a.user_id = ?
+                ORDER BY j.arrival_time DESC
+                """;
+
+        return jdbcTemplate.query(sql, new WorkloadJobRowMapper(), userId);
     }
 
     public List<WorkloadJob> findQueuedJobs() {

@@ -52,10 +52,10 @@ public class EnvironmentVariableDao {
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new EnvironmentVariableRowMapper(),
-                id);
+        return jdbcTemplate.query(sql, new EnvironmentVariableRowMapper(), id)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     public EnvironmentVariable findByKey(
@@ -71,11 +71,10 @@ public class EnvironmentVariableDao {
                   AND variable_key = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new EnvironmentVariableRowMapper(),
-                applicationId,
-                variableKey);
+        return jdbcTemplate.query(sql, new EnvironmentVariableRowMapper(), applicationId, variableKey)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     public List<EnvironmentVariable> findByApplicationId(

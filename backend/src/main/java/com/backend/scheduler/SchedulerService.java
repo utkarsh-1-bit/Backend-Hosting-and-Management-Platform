@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Comparator;
 
 @Service
 public class SchedulerService {
@@ -59,4 +60,26 @@ public class SchedulerService {
 
         workloadExecutor.execute(job);
     }
+
+        public List<WorkloadJob> previewQueue(Long userId, String algorithm) {
+        List<WorkloadJob> queuedJobs = jobService.findByUserId(userId).stream()
+            .filter(job -> "QUEUED".equals(job.getStatus())
+                || "SCHEDULED".equals(job.getStatus()))
+            .toList();
+
+        Comparator<WorkloadJob> comparator = switch (algorithm.toUpperCase()) {
+            case "SJF" -> Comparator.comparing(
+                WorkloadJob::getBurstTime,
+                Comparator.nullsLast(Integer::compareTo));
+            case "PRIORITY" -> Comparator.comparing(
+                WorkloadJob::getPriority,
+                Comparator.nullsLast(Integer::compareTo));
+            case "FCFS" -> Comparator.comparing(
+                WorkloadJob::getArrivalTime,
+                Comparator.nullsLast(java.sql.Timestamp::compareTo));
+            default -> throw new IllegalArgumentException("Unsupported scheduling algorithm");
+        };
+
+        return queuedJobs.stream().sorted(comparator).toList();
+        }
 }

@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.net.URI;
 
 @Service
 public class GitService {
@@ -27,10 +28,7 @@ public class GitService {
                     "Application ID is required");
         }
 
-        if (repositoryUrl == null || repositoryUrl.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Repository URL is required");
-        }
+        validateRepositoryUrl(repositoryUrl);
 
         if (branch == null || branch.isBlank()) {
             throw new IllegalArgumentException(
@@ -88,6 +86,19 @@ public class GitService {
         }
     }
 
+    public void validateRepositoryUrl(String repositoryUrl) {
+        try {
+            URI uri = URI.create(repositoryUrl);
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || uri.getHost() == null
+                    || uri.getRawUserInfo() != null) {
+                throw new IllegalArgumentException("Repository URL must be a credential-free HTTPS URL");
+            }
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("Invalid repository URL", exception);
+        }
+    }
+
     public void deleteWorkspace(Long applicationId) {
 
         if (applicationId == null) {
@@ -107,21 +118,6 @@ public class GitService {
         }
 
         try {
-            Process process = new ProcessBuilder(
-                    "cmd.exe",
-                    "/c",
-                    "attrib",
-                    "-R", "-S", "-H",
-                    directory.toString() + "\\*",
-                    "/S", "/D").redirectErrorStream(true).start();
-
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                throw new IOException(
-                        "Failed to remove file attributes from " + directory);
-            }
-
             Files.walkFileTree(directory, new SimpleFileVisitor<>() {
 
                 @Override
@@ -129,6 +125,7 @@ public class GitService {
                         Path file,
                         BasicFileAttributes attributes) throws IOException {
 
+                    clearReadOnlyAttribute(file);
                     Files.delete(file);
                     return FileVisitResult.CONTINUE;
                 }
@@ -142,6 +139,7 @@ public class GitService {
                         throw exception;
                     }
 
+                    clearReadOnlyAttribute(dir);
                     Files.delete(dir);
                     return FileVisitResult.CONTINUE;
                 }
@@ -150,10 +148,12 @@ public class GitService {
         } catch (IOException e) {
             throw new RuntimeException(
                     "Failed to delete workspace: " + directory, e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(
-                    "Interrupted while deleting workspace: " + directory, e);
+        }
+    }
+
+    private void clearReadOnlyAttribute(Path path) throws IOException {
+        if (System.getProperty("os.name", "").toLowerCase().startsWith("windows")) {
+            Files.setAttribute(path, "dos:readonly", false);
         }
     }
 }

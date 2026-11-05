@@ -1,16 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appApi, envApi } from '../services/api';
-import { mockData } from '../services/mockData';
-import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    BarChart, Bar,
-} from 'recharts';
+import PageArtwork from '../components/PageArtwork';
 import {
     ArrowLeft, Play, Square, RotateCcw, Trash2,
     GitBranch, Clock, Terminal, Settings, Activity, Key,
-    Plus, X, Copy, ExternalLink, RefreshCw, Check
+    Plus, X, Copy, ExternalLink, RefreshCw, Check, Eye, EyeOff
 } from 'lucide-react';
 
 export default function AppDetailPage() {
@@ -19,7 +15,6 @@ export default function AppDetailPage() {
     const navigate = useNavigate();
 
     const [app, setApp] = useState(null);
-    const [containers, setContainers] = useState([]);
     const [logs, setLogs] = useState([]);
     const [metrics, setMetrics] = useState(null);
     const [envVars, setEnvVars] = useState([]);
@@ -29,125 +24,73 @@ export default function AppDetailPage() {
     const [actionLoading, setActionLoading] = useState('');
     const [showEnvModal, setShowEnvModal] = useState(false);
     const [copiedUrl, setCopiedUrl] = useState(false);
+    const [error, setError] = useState('');
+    const [revealedEnvKeys, setRevealedEnvKeys] = useState({});
 
-    const loadData = async (isManual = false) => {
+    const loadData = useCallback(async (isManual = false) => {
         if (isManual) setRefreshing(true);
-        else setLoading(true);
 
         try {
-            // 1. Fetch live application response from backend GET /api/applications/{id}
-            let liveAppRes = null;
-            let userApps = [];
-
-            try {
-                liveAppRes = await appApi.getById(id);
-            } catch (err) {
-                console.warn('Backend getById failed, will fallback:', err.message);
+            const userApps = await appApi.getByUser(user.id);
+            setError('');
+            const ownedApp = userApps.find((item) => String(item.id) === String(id));
+            if (!ownedApp) {
+                setApp(null);
+                setEnvVars([]);
+                setLogs([]);
+                setMetrics(null);
+                return;
             }
 
-            try {
-                const userId = user?.id || 1;
-                userApps = await appApi.getByUser(userId);
-            } catch {
-                // userApps remains empty
-            }
-
-            // Find full app metadata from user's apps or mock store
-            let fullApp = userApps?.find((a) => String(a.id) === String(id));
-            if (!fullApp) {
-                try {
-                    fullApp = await mockData.getApplication(id);
-                } catch {
-                    fullApp = null;
-                }
-            }
-
-            if (liveAppRes) {
-                setApp({
-                    ...(fullApp || {}),
-                    id: liveAppRes.id || Number(id),
-                    name: liveAppRes.name || fullApp?.name || `App #${id}`,
-                    status: liveAppRes.status || fullApp?.status || 'UNKNOWN',
-                    url: liveAppRes.url || null,
-                });
-            } else {
-                setApp(fullApp);
-            }
-
-            // 2. Fetch real environment variables from backend GET /api/applications/{id}/env
-            try {
-                const liveEnvs = await envApi.getByApp(id);
-                setEnvVars(Array.isArray(liveEnvs) ? liveEnvs : []);
-            } catch {
-                const fallbackEnvs = await mockData.getEnvVarsByApp(id);
-                setEnvVars(fallbackEnvs);
-            }
-
-            // 3. Complement with container, logs, and telemetry
-            const [c, l, m] = await Promise.all([
-                mockData.getContainersByApp(id),
-                mockData.getApplicationLogs(),
-                mockData.getApplicationMetrics(),
+            const [liveApp, liveEnvs] = await Promise.all([
+                appApi.getById(id),
+                envApi.getByApp(id),
             ]);
 
-            // If live URL is known from backend, update the container hostPort display
-            if (liveAppRes?.url) {
-                const portMatch = liveAppRes.url.match(/:(\d+)$/);
-                if (portMatch && c.length > 0) {
-                    c[0].hostPort = Number(portMatch[1]);
-                    c[0].status = liveAppRes.status;
-                }
+            setApp({ ...ownedApp, ...liveApp });
+            setEnvVars(Array.isArray(liveEnvs) ? liveEnvs : []);
+            if (liveApp.status === 'RUNNING') {
+                const [logResult, resourceResult] = await Promise.all([
+                    appApi.getLogs(id).then((value) => ({ value })).catch(() => null),
+                    appApi.getResources(id).then((value) => ({ value })).catch(() => null),
+                ]);
+                setLogs(logResult?.value
+                    ? logResult.value.split(/\r?\n/).filter(Boolean).map((message) => ({ message, level: /error/i.test(message) ? 'error' : /warn/i.test(message) ? 'warn' : 'info' }))
+                    : []);
+                setMetrics(resourceResult?.value || null);
+            } else {
+                setLogs([]);
+                setMetrics(null);
             }
-
-            setContainers(c);
-            setLogs(l);
-            setMetrics(m);
         } catch (err) {
-            console.error('Failed to load application detail:', err);
+            setError(err.message || 'Unable to load application details.');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [id, user?.id]);
 
     useEffect(() => {
-        loadData();
-    }, [id, user?.id]);
+        void loadData();
+    }, [loadData]);
 
     const handleAction = async (action) => {
         setActionLoading(action);
         try {
             switch (action) {
                 case 'start':
-                    try {
-                        await appApi.start(id);
-                    } catch {
-                        await mockData.startApplication(id);
-                    }
+                    await appApi.start(id);
                     break;
                 case 'stop':
-                    try {
-                        await appApi.stop(id);
-                    } catch {
-                        await mockData.stopApplication(id);
-                    }
+                    await appApi.stop(id);
                     break;
                 case 'restart':
-                    try {
-                        await appApi.restart(id);
-                    } catch {
-                        await mockData.stopApplication(id);
-                        await mockData.startApplication(id);
-                    }
+                    await appApi.restart(id);
                     break;
                 case 'delete':
                     if (window.confirm(`Are you sure you want to delete "${app?.name}"? This removes all containers and configurations.`)) {
-                        try {
-                            await appApi.delete(id);
-                        } catch {
-                            await mockData.deleteApplication(id);
-                        }
-                        navigate('/applications');
+                        await appApi.delete(id);
+                        void navigate('/applications');
                         return;
                     }
                     break;
@@ -156,7 +99,7 @@ export default function AppDetailPage() {
             }
             await loadData(true);
         } catch (err) {
-            alert(`Action ${action} failed: ${err.message}`);
+            setError(`Could not ${action} application: ${err.message}`);
         } finally {
             setActionLoading('');
         }
@@ -166,23 +109,18 @@ export default function AppDetailPage() {
         if (!window.confirm(`Delete environment variable "${variableKey}"?`)) return;
         try {
             await envApi.delete(id, variableKey);
-        } catch (err) {
-            console.warn('Real delete env failed, fallback to mock:', err.message);
-            await mockData.deleteEnvVar(variableKey);
-        }
-        // Reload environment variables
-        try {
             const updated = await envApi.getByApp(id);
             setEnvVars(Array.isArray(updated) ? updated : []);
-        } catch {
-            const updatedFallback = await mockData.getEnvVarsByApp(id);
-            setEnvVars(updatedFallback);
+        } catch (err) {
+            setError(err.message || 'Unable to delete environment variable.');
         }
     };
 
     const copyUrlToClipboard = () => {
         if (!app?.url) return;
-        navigator.clipboard.writeText(app.url);
+        void navigator.clipboard.writeText(app.url).catch(() => {
+            setError('Clipboard access is unavailable in this browser context.');
+        });
         setCopiedUrl(true);
         setTimeout(() => setCopiedUrl(false), 2000);
     };
@@ -214,14 +152,6 @@ export default function AppDetailPage() {
         { key: 'settings', label: 'Settings', icon: Settings },
     ];
 
-    const chartTooltipStyle = {
-        backgroundColor: 'var(--bg-elevated)',
-        border: '1px solid var(--border-default)',
-        borderRadius: 8,
-        fontSize: '0.8rem',
-        color: 'var(--text-primary)',
-    };
-
     return (
         <>
             <div className="detail-header">
@@ -248,6 +178,8 @@ export default function AppDetailPage() {
                         )}
                     </div>
                 </div>
+
+                <PageArtwork variant="detail" />
 
                 <div className="detail-actions">
                     <button
@@ -299,6 +231,8 @@ export default function AppDetailPage() {
                     </button>
                 </div>
             </div>
+
+            {error && <div className="auth-error" role="alert">{error}</div>}
 
             {/* Live Service URL Banner (Returned by updated backend ApplicationResponse) */}
             {app.url && app.status === 'RUNNING' && (
@@ -387,8 +321,8 @@ export default function AppDetailPage() {
                                 <div style={{ display: 'grid', gap: 14 }}>
                                     <InfoRow label="Repository URL" value={app.repositoryUrl || '—'} mono />
                                     <InfoRow label="Git Branch" value={app.branch || 'main'} />
-                                    <InfoRow label="Build Command" value={app.buildCommand || '—'} mono />
                                     <InfoRow label="Start Command" value={app.startCommand || '—'} mono />
+                                    <InfoRow label="Container Port" value={app.containerPort || 8080} />
                                     <InfoRow
                                         label="Last Updated"
                                         value={app.updatedAt ? new Date(app.updatedAt).toLocaleString() : '—'}
@@ -398,42 +332,12 @@ export default function AppDetailPage() {
                         </div>
                     </div>
 
-                    {metrics && app.url && app.status === 'RUNNING' && (
-                        <div className="content-grid">
-                            <div className="card">
-                                <div className="card-header">
-                                    <span className="card-title">CPU Utilization</span>
-                                </div>
-                                <div className="card-body" style={{ height: 220 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={metrics.cpuUsage}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                                            <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
-                                            <YAxis stroke="var(--text-tertiary)" fontSize={11} unit="%" />
-                                            <Tooltip contentStyle={chartTooltipStyle} />
-                                            <Area type="monotone" dataKey="value" stroke="var(--accent-primary)" fill="var(--accent-primary-muted)" name="CPU %" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-
-                            <div className="card">
-                                <div className="card-header">
-                                    <span className="card-title">Memory Allocation</span>
-                                </div>
-                                <div className="card-body" style={{ height: 220 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={metrics.memoryUsage}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                                            <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={11} />
-                                            <YAxis stroke="var(--text-tertiary)" fontSize={11} unit="MB" />
-                                            <Tooltip contentStyle={chartTooltipStyle} />
-                                            <Bar dataKey="value" fill="var(--accent-secondary)" name="Memory MB" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        </div>
+                    {metrics && app.status === 'RUNNING' && (
+                        <section className="stats-grid" aria-label="Current resource usage">
+                            <ResourceStat label="CPU usage" value={metrics.cpuUsage} />
+                            <ResourceStat label="Memory usage" value={metrics.memoryUsage} />
+                            <ResourceStat label="Memory utilization" value={metrics.memoryPercentage} />
+                        </section>
                     )}
                 </>
             )}
@@ -442,10 +346,22 @@ export default function AppDetailPage() {
                 <div className="card">
                     <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span className="card-title">Runtime Container Logs</span>
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>Auto-updating</span>
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => loadData(true)}
+                            disabled={refreshing}
+                            title="Refresh runtime logs"
+                        >
+                            <RefreshCw size={14} className={refreshing ? 'spinning' : ''} />
+                            Refresh
+                        </button>
                     </div>
                     <div className="terminal-viewer">
-                        {logs.map((log, i) => (
+                        {app.status !== 'RUNNING' ? (
+                            <div className="terminal-empty">Start this application to view its runtime logs.</div>
+                        ) : logs.length === 0 ? (
+                            <div className="terminal-empty">No runtime logs are available yet.</div>
+                        ) : logs.map((log, i) => (
                             <div key={i} className={`terminal-line ${log.level}`}>
                                 {log.message}
                             </div>
@@ -486,8 +402,18 @@ export default function AppDetailPage() {
                                     {envVars.map((env) => (
                                         <tr key={env.id || env.variableKey}>
                                             <td className="cell-mono" style={{ fontWeight: 600 }}>{env.variableKey}</td>
-                                            <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>{env.variableValue}</td>
+                                            <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>
+                                                {revealedEnvKeys[env.variableKey] ? env.variableValue : 'Value hidden'}
+                                            </td>
                                             <td>
+                                                <button
+                                                    className="btn btn-secondary btn-sm btn-icon"
+                                                    onClick={() => setRevealedEnvKeys((current) => ({ ...current, [env.variableKey]: !current[env.variableKey] }))}
+                                                    title={revealedEnvKeys[env.variableKey] ? 'Hide value' : 'Reveal value'}
+                                                    aria-label={revealedEnvKeys[env.variableKey] ? `Hide ${env.variableKey}` : `Reveal ${env.variableKey}`}
+                                                >
+                                                    {revealedEnvKeys[env.variableKey] ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                </button>
                                                 <button
                                                     className="btn btn-danger btn-sm btn-icon"
                                                     onClick={() => handleDeleteEnv(env.variableKey)}
@@ -511,7 +437,7 @@ export default function AppDetailPage() {
                         <span className="card-title">General Settings</span>
                     </div>
                     <div className="card-body">
-                        <SettingsForm app={app} onSaved={() => loadData(true)} />
+                        <SettingsForm app={app} onSaved={() => void loadData(true)} />
                     </div>
                 </div>
             )}
@@ -522,7 +448,7 @@ export default function AppDetailPage() {
                     onClose={() => setShowEnvModal(false)}
                     onCreated={() => {
                         setShowEnvModal(false);
-                        loadData(true);
+                        void loadData(true);
                     }}
                 />
             )}
@@ -567,13 +493,7 @@ function EnvModal({ appId, onClose, onCreated }) {
             await envApi.create(appId, { variableKey: key.trim(), variableValue: value.trim() });
             onCreated();
         } catch (err) {
-            console.warn('Real backend create env failed, fallback to mock:', err.message);
-            try {
-                await mockData.createEnvVar(appId, { variableKey: key.trim(), variableValue: value.trim() });
-                onCreated();
-            } catch (fallbackErr) {
-                setError(fallbackErr.message || err.message);
-            }
+            setError(err.message || 'Unable to add environment variable.');
         } finally {
             setLoading(false);
         }
@@ -628,13 +548,25 @@ function EnvModal({ appId, onClose, onCreated }) {
     );
 }
 
+function ResourceStat({ label, value }) {
+    return (
+        <div className="stat-card">
+            <div className="stat-card-header">
+                <span className="stat-card-label">{label}</span>
+            </div>
+            <div className="stat-card-value">{value || '—'}</div>
+        </div>
+    );
+}
+
 function SettingsForm({ app, onSaved }) {
     const [form, setForm] = useState({
         name: app.name || '',
         repositoryUrl: app.repositoryUrl || '',
         branch: app.branch || 'main',
-        buildCommand: app.buildCommand || '',
         startCommand: app.startCommand || '',
+        plan: app.plan || 'BASIC',
+        containerPort: app.containerPort || 8080,
     });
     const [loading, setLoading] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -650,19 +582,11 @@ function SettingsForm({ app, onSaved }) {
         setLoading(true);
         setError('');
         try {
-            // Connect to real Spring Boot backend PUT /api/applications/{id}
-            await appApi.update(app.id, form);
+            await appApi.update(app.id, { ...form, containerPort: Number(form.containerPort) });
             setSaved(true);
             onSaved();
         } catch (err) {
-            console.warn('Real backend update failed, falling back to mock:', err.message);
-            try {
-                await mockData.updateApplication(app.id, form);
-                setSaved(true);
-                onSaved();
-            } catch (fallbackErr) {
-                setError(fallbackErr.message || err.message);
-            }
+            setError(err.message || 'Unable to save application settings.');
         } finally {
             setLoading(false);
         }
@@ -685,13 +609,22 @@ function SettingsForm({ app, onSaved }) {
                     <input className="form-input" value={form.branch} onChange={handleChange('branch')} required />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">Build Command</label>
-                    <input className="form-input" value={form.buildCommand} onChange={handleChange('buildCommand')} />
+                    <label className="form-label">Container Port</label>
+                    <input className="form-input" type="number" min="1" max="65535" value={form.containerPort} onChange={handleChange('containerPort')} required />
+                    <div className="form-hint">Use the port your app listens on inside the container (for example, 80 for Nginx or 8080 for Spring Boot).</div>
                 </div>
             </div>
             <div className="form-group">
                 <label className="form-label">Start Command</label>
                 <input className="form-input" value={form.startCommand} onChange={handleChange('startCommand')} />
+            </div>
+            <div className="form-group">
+                <label className="form-label">Resource Plan</label>
+                <select className="form-input" value={form.plan} onChange={handleChange('plan')}>
+                    <option value="BASIC">Basic · 0.5 CPU · 512 MB</option>
+                    <option value="STANDARD">Standard · 1 CPU · 1 GB</option>
+                    <option value="PREMIUM">Premium · 2 CPU · 2 GB</option>
+                </select>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
                 <button type="submit" className="btn btn-primary" disabled={loading}>

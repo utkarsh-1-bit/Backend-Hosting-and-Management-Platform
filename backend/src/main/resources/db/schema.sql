@@ -1,4 +1,4 @@
-CREATE table users(
+CREATE TABLE IF NOT EXISTS users(
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name varchar(100) NOT NULL,
     email varchar(255) NOT NULL UNIQUE,
@@ -6,7 +6,7 @@ CREATE table users(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE applications (
+CREATE TABLE IF NOT EXISTS applications (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -15,6 +15,8 @@ CREATE TABLE applications (
     build_command VARCHAR(500),
     start_command VARCHAR(500),
     status VARCHAR(30) NOT NULL,
+    plan VARCHAR(30) NOT NULL DEFAULT 'BASIC',
+    container_port INT NOT NULL DEFAULT 8080,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -25,7 +27,7 @@ CREATE TABLE applications (
 );
 
 
-CREATE TABLE workload_jobs (
+CREATE TABLE IF NOT EXISTS workload_jobs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     application_id BIGINT NOT NULL,
     job_type VARCHAR(30) NOT NULL,
@@ -41,7 +43,7 @@ CREATE TABLE workload_jobs (
         REFERENCES applications(id)
 );
 
-CREATE TABLE containers (
+CREATE TABLE IF NOT EXISTS containers (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     application_id BIGINT NOT NULL,
     docker_container_id VARCHAR(100) NOT NULL UNIQUE,
@@ -58,7 +60,7 @@ CREATE TABLE containers (
         REFERENCES applications(id)
 );
 
-CREATE TABLE environment_variables (
+CREATE TABLE IF NOT EXISTS environment_variables (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     application_id BIGINT NOT NULL,
     variable_key VARCHAR(100) NOT NULL,

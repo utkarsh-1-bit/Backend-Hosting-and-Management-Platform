@@ -58,10 +58,10 @@ public class ContainerDao {
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new ContainerRowMapper(),
-                id);
+        return jdbcTemplate.query(sql, new ContainerRowMapper(), id)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     public Container findByDockerContainerId(
@@ -76,10 +76,10 @@ public class ContainerDao {
                 WHERE docker_container_id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new ContainerRowMapper(),
-                dockerContainerId);
+        return jdbcTemplate.query(sql, new ContainerRowMapper(), dockerContainerId)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     public List<Container> findByApplicationId(
@@ -116,10 +116,10 @@ public class ContainerDao {
                 LIMIT 1
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new ContainerRowMapper(),
-                applicationId);
+        return jdbcTemplate.query(sql, new ContainerRowMapper(), applicationId)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     public int updateStatus(Long id, String status) {

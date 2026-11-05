@@ -22,6 +22,8 @@ public class EnvironmentVariableService {
     public EnvironmentVariable createVariable(
             EnvironmentVariable variable) {
 
+        validateVariable(variable);
+
         if (variable == null ||
                 variable.getApplicationId() == null ||
                 variable.getVariableKey() == null) {
@@ -81,6 +83,7 @@ public class EnvironmentVariableService {
     public void updateVariable(
             EnvironmentVariable variable) {
 
+        validateVariable(variable);
         findById(variable.getId());
 
         variableDao.updateVariable(variable);
@@ -100,5 +103,13 @@ public class EnvironmentVariableService {
         variableDao.deleteByKey(
                 applicationId,
                 key);
+    }
+
+    private void validateVariable(EnvironmentVariable variable) {
+        if (variable == null || variable.getVariableKey() == null
+                || !variable.getVariableKey().matches("[A-Za-z_][A-Za-z0-9_]*")
+                || variable.getVariableValue() == null) {
+            throw new IllegalArgumentException("Invalid environment variable");
+        }
     }
 }

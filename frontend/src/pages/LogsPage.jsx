@@ -1,44 +1,56 @@
 import { useState, useEffect } from 'react';
-import { mockData } from '../services/mockData';
-import { Terminal, Download, Trash2, Filter } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { appApi } from '../services/api';
+import PageArtwork from '../components/PageArtwork';
+import { Download } from 'lucide-react';
 
 export default function LogsPage() {
+  const { user } = useAuth();
   const [apps, setApps] = useState([]);
-  const [selectedApp, setSelectedApp] = useState(1);
+  const [selectedApp, setSelectedApp] = useState('');
   const [logs, setLogs] = useState([]);
   const [filterLevel, setFilterLevel] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function init() {
       try {
-        const appsData = await mockData.getApplications();
+        const appsData = await appApi.getByUser(user.id);
         setApps(appsData);
         if (appsData.length > 0) {
           setSelectedApp(appsData[0].id);
         }
       } catch (err) {
-        console.error(err);
+        setError(err.message || 'Unable to load applications.');
+      } finally {
+        setLoading(false);
       }
     }
-    init();
-  }, []);
+    void init();
+  }, [user?.id]);
 
   useEffect(() => {
     async function fetchLogs() {
       if (!selectedApp) return;
       try {
         setLoading(true);
-        const data = await mockData.getApplicationLogs(selectedApp);
-        setLogs(data);
+        setError('');
+        const output = await appApi.getLogs(selectedApp);
+        const entries = output.split(/\r?\n/).filter(Boolean).map((message) => ({
+          message,
+          level: /\berror\b/i.test(message) ? 'error' : /\bwarn(?:ing)?\b/i.test(message) ? 'warn' : 'info',
+        }));
+        setLogs(entries);
       } catch (err) {
-        console.error(err);
+        setLogs([]);
+        setError(err.message || 'Unable to retrieve application logs.');
       } finally {
         setLoading(false);
       }
     }
-    fetchLogs();
+    void fetchLogs();
   }, [selectedApp]);
 
   const filteredLogs = logs.filter((log) => {
@@ -46,10 +58,6 @@ export default function LogsPage() {
     if (searchQuery && !log.message.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
-
-  const handleClear = () => {
-    setLogs([]);
-  };
 
   const handleDownload = () => {
     const text = filteredLogs.map(l => l.message).join('\n');
@@ -63,22 +71,21 @@ export default function LogsPage() {
 
   return (
     <div className="logs-page">
-      <div className="page-header">
+      <div className="page-header page-header-illustrated">
         <div>
-          <h1 className="page-title">System & App Logs</h1>
-          <p className="page-subtitle">Real-time log aggregation and standard output streaming</p>
+          <h1 className="page-title">Application Logs</h1>
+          <p className="page-subtitle">Container output retrieved from the selected application runtime</p>
         </div>
+        <PageArtwork variant="logs" />
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={handleClear} title="Clear view">
-            <Trash2 size={16} />
-            Clear
-          </button>
           <button className="btn btn-secondary" onClick={handleDownload} title="Export logs">
             <Download size={16} />
             Export
           </button>
         </div>
       </div>
+
+      {error && <div className="auth-error" role="alert">{error}</div>}
 
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-header" style={{ flexWrap: 'wrap', gap: '16px' }}>

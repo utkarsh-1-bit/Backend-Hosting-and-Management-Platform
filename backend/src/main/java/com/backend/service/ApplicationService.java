@@ -56,6 +56,8 @@ public class ApplicationService {
                     "Invalid application data");
         }
 
+                application.setName(application.getName().trim());
+
         if (applicationDao.existsByNameForUser(
                 application.getUserId(),
                 application.getName())) {
@@ -71,6 +73,16 @@ public class ApplicationService {
         }
 
         application.setPlan(application.getPlan().toUpperCase());
+        if (application.getBranch() == null || application.getBranch().isBlank()) {
+            application.setBranch("main");
+        }
+        if (application.getContainerPort() == null) {
+            application.setContainerPort(8080);
+        }
+        if (application.getContainerPort() < 1 || application.getContainerPort() > 65535) {
+            throw new IllegalArgumentException("Container port must be between 1 and 65535");
+        }
+        gitService.validateRepositoryUrl(application.getRepositoryUrl());
 
         application.setStatus("CREATED");
 
@@ -113,6 +125,14 @@ public class ApplicationService {
         return application;
     }
 
+    public void assertOwnedBy(Long applicationId, Long userId) {
+        Application application = findById(applicationId);
+        if (!userId.equals(application.getUserId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND);
+        }
+    }
+
     public List<Application> findByUserId(Long userId) {
 
         return applicationDao.findByUserId(userId);
@@ -121,7 +141,32 @@ public class ApplicationService {
     public Application updateApplication(
             Application application) {
 
-        findById(application.getId());
+        Application existing = findById(application.getId());
+        if (application.getName() == null || application.getName().isBlank()) {
+            throw new IllegalArgumentException("Application name is required");
+        }
+        if (application.getContainerPort() == null) {
+            application.setContainerPort(existing.getContainerPort());
+        }
+        if (application.getBuildCommand() == null) {
+            application.setBuildCommand(existing.getBuildCommand());
+        }
+        if (application.getContainerPort() < 1 || application.getContainerPort() > 65535) {
+            throw new IllegalArgumentException("Container port must be between 1 and 65535");
+        }
+        if (application.getPlan() == null) {
+            application.setPlan(existing.getPlan());
+        }
+        if (!List.of("BASIC", "STANDARD", "PREMIUM")
+                .contains(application.getPlan().toUpperCase(java.util.Locale.ROOT))) {
+            throw new IllegalArgumentException("Invalid hosting plan");
+        }
+        application.setPlan(application.getPlan().toUpperCase(java.util.Locale.ROOT));
+        application.setName(application.getName().trim());
+        if (application.getBranch() == null || application.getBranch().isBlank()) {
+            application.setBranch(existing.getBranch());
+        }
+        gitService.validateRepositoryUrl(application.getRepositoryUrl());
 
         applicationDao.updateApplication(
                 application);
@@ -189,6 +234,7 @@ public class ApplicationService {
             throw new IllegalStateException("Application is already running");
         }
 
+        runtime.verifyAvailable();
         cleanupDeployment(id);
 
         WorkloadJob job = new WorkloadJob();
@@ -206,15 +252,24 @@ public class ApplicationService {
         Application application = findById(id);
 
         if ("RUNNING".equals(application.getStatus())) {
-            throw new IllegalStateException("Application is already running");
+            throw new com.backend.exception.InvalidStateTransitionException(
+                    "Application is already running");
+        }
+        if ("DEPLOYING".equals(application.getStatus())) {
+            throw new com.backend.exception.InvalidStateTransitionException(
+                    "Application is already deploying");
         }
 
-        Container container = containerService.findByApplicationId(id).getFirst();
+        Container container = containerService.findByApplicationId(id)
+            .stream()
+            .findFirst()
+            .orElse(null);
 
         if (container == null) {
             deployApplication(id);
             return "Application will start soon";
         } else {
+            runtime.verifyAvailable();
             containerService.startContainer(container.getId());
             updateStatus(id, "RUNNING");
             return "Application is Running";
@@ -242,22 +297,25 @@ public class ApplicationService {
 
         Application application = findById(id);
 
-        if (!"STOPPED".equals(application.getStatus())) {
-            throw new IllegalStateException(
-                    "Application is not stopped");
+        if ("DEPLOYING".equals(application.getStatus())) {
+            throw new com.backend.exception.InvalidStateTransitionException(
+                    "Application is currently deploying");
         }
-        try {
-            Container container = containerService.findRunningByApplicationId(id);
 
-            containerService.startContainer(
-                    container.getId());
+        Container container = containerService.findByApplicationId(id)
+                .stream()
+                .findFirst()
+                .orElse(null);
 
-            updateStatus(id, "RUNNING");
-
-            return "Application Restarted";
-        } catch (Exception e) {
-            throw e;
+        if (container == null) {
+            deployApplication(id);
+            return "Application deployment queued";
         }
+
+        runtime.verifyAvailable();
+        containerService.restartContainer(container.getId());
+        updateStatus(id, "RUNNING");
+        return "Application restarted";
 
     }
 

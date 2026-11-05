@@ -7,21 +7,26 @@ import com.backend.exception.AuthenticationFailedException;
 import com.backend.exception.DuplicateResourceException;
 import com.backend.exception.ResourceNotFoundException;
 import com.backend.model.User;
+import com.backend.security.TokenService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import java.util.Locale;
 
 @Service
 public class UserService {
 
     private final UserDao userDao;
     private final PasswordEncoder passwordEncoder;
+    private final TokenService tokenService;
 
     public UserService(
             UserDao userDao,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            TokenService tokenService) {
 
         this.userDao = userDao;
         this.passwordEncoder = passwordEncoder;
+        this.tokenService = tokenService;
     }
 
     public UserReponse register(User user) {
@@ -29,11 +34,18 @@ public class UserService {
         if (user == null ||
                 user.getName() == null ||
                 user.getEmail() == null ||
-                user.getPassword() == null) {
+                user.getPassword() == null ||
+                user.getName().isBlank() ||
+                user.getEmail().isBlank() ||
+                user.getPassword().length() < 10 ||
+                user.getPassword().length() > 72) {
 
             throw new IllegalArgumentException(
-                    "Invalid user data");
+                    "Name and email are required; password must be between 10 and 72 characters");
         }
+
+        user.setName(user.getName().trim());
+        user.setEmail(user.getEmail().trim().toLowerCase(Locale.ROOT));
 
         if (userDao.existsByEmail(user.getEmail())) {
             throw new DuplicateResourceException(
@@ -46,12 +58,17 @@ public class UserService {
 
         userDao.createUser(user);
 
-        return new UserReponse(userDao.findByEmail(user.getEmail()));
+        User registeredUser = userDao.findByEmail(user.getEmail());
+        return new UserReponse(registeredUser, tokenService.createToken(registeredUser.getId()));
     }
 
     public UserReponse login(LoginRequest req) {
 
-        User user = userDao.findByEmail(req.getEmail());
+        if (req == null || req.getEmail() == null || req.getPassword() == null) {
+            throw new AuthenticationFailedException("Invalid email or password");
+        }
+
+        User user = userDao.findByEmail(req.getEmail().trim().toLowerCase(Locale.ROOT));
 
         if (user == null ||
                 !passwordEncoder.matches(
@@ -62,7 +79,7 @@ public class UserService {
                     "Invalid email or password");
         }
 
-        return new UserReponse(user);
+        return new UserReponse(user, tokenService.createToken(user.getId()));
     }
 
     public User findById(Long id) {

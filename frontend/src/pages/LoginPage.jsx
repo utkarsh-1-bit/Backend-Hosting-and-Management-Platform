@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Server } from 'lucide-react';
+import PageArtwork from '../components/PageArtwork';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('utkarsh@hostex.dev');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +36,7 @@ export default function LoginPage() {
           </div>
           <h1>Welcome back</h1>
           <p>Sign in to your HosteX account</p>
+          <PageArtwork variant="auth" />
         </div>
 
         <div className="auth-card">

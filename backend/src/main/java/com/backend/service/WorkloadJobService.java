@@ -33,6 +33,17 @@ public class WorkloadJobService {
                     "Invalid job type");
         }
 
+        if (job.getPriority() == null) {
+            job.setPriority(1);
+        }
+        if (job.getBurstTime() == null) {
+            job.setBurstTime(10);
+        }
+        if (job.getPriority() < 1 || job.getPriority() > 5
+                || job.getBurstTime() < 1 || job.getBurstTime() > 3600) {
+            throw new IllegalArgumentException("Invalid job priority or burst time");
+        }
+
         job.setStatus("QUEUED");
 
         job.setArrivalTime(
@@ -59,6 +70,10 @@ public class WorkloadJobService {
             Long applicationId) {
 
         return jobDao.findByApplicationId(applicationId);
+    }
+
+    public List<WorkloadJob> findByUserId(Long userId) {
+        return jobDao.findByUserId(userId);
     }
 
     public List<WorkloadJob> findQueuedJobs() {
