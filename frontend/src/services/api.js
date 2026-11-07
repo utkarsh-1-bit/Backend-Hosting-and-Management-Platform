@@ -1,25 +1,26 @@
-// API client service for HosteX backend integration
-// Points to Spring Boot REST backend on http://localhost:8080 (via Vite proxy or direct base URL)
-
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-/**
- * Universal fetch wrapper with error handling and fallback support
- */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
-  const token = localStorage.getItem('hostex_token');
+  const token = sessionStorage.getItem('hostex_token');
+  const { headers: optionHeaders, ...requestOptions } = options;
 
   const config = {
+    ...requestOptions,
     headers: {
-      'Content-Type': 'application/json',
+      ...(requestOptions.body && { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
+      ...optionHeaders,
     },
-    ...options,
   };
 
   const response = await fetch(url, config);
+
+  if (response.status === 401) {
+    sessionStorage.removeItem('hostex_token');
+    sessionStorage.removeItem('hostex_user');
+    window.dispatchEvent(new Event('hostex:unauthorized'));
+  }
 
   if (!response.ok) {
     let errorMessage = `HTTP Error ${response.status}`;
@@ -38,7 +39,13 @@ async function request(endpoint, options = {}) {
   }
 
   if (response.status === 204) return null;
-  return response.json();
+  const responseText = await response.text();
+  if (!responseText) return null;
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return responseText;
+  }
 }
 
 /**
@@ -64,29 +71,17 @@ export const authApi = {
 };
 
 /**
- * Applications Endpoints
- * Maps to com.backend.controller.ApplicationController:
- * - POST /api/applications
- * - GET /api/applications/{id} -> returns ApplicationResponse { id, name, status, url }
- * - GET /api/applications/user/{userId} -> returns List<Application>
- * - PUT /api/applications/{id}
- * - DELETE /api/applications/{id}
- * - POST /api/applications/{id}/start
- * - POST /api/applications/{id}/stop
- * - POST /api/applications/{id}/restart
+ * Application and runtime endpoints
  */
 export const appApi = {
-  // Get all applications for a specific user
   getByUser: async (userId) => {
     return request(`/api/applications/user/${userId}`);
   },
 
-  // Get application response with container live URL and status
   getById: async (id) => {
     return request(`/api/applications/${id}`);
   },
 
-  // Create new application
   create: async (data) => {
     return request('/api/applications', {
       method: 'POST',
@@ -94,7 +89,6 @@ export const appApi = {
     });
   },
 
-  // Update application configuration
   update: async (id, data) => {
     return request(`/api/applications/${id}`, {
       method: 'PUT',
@@ -102,14 +96,12 @@ export const appApi = {
     });
   },
 
-  // Delete application and clean up container resources
   delete: async (id) => {
     return request(`/api/applications/${id}`, {
       method: 'DELETE',
     });
   },
 
-  // Lifecycle operations
   start: async (id) => {
     return request(`/api/applications/${id}/start`, {
       method: 'POST',
@@ -127,6 +119,27 @@ export const appApi = {
       method: 'POST',
     });
   },
+
+  deploy: async (id) => request(`/api/applications/${id}/deploy`, { method: 'POST' }),
+
+  getResources: async (id) => request(`/api/applications/${id}/resources`),
+
+  getLogs: async (id) => request(`/api/applications/${id}/logs`),
+};
+
+export const jobsApi = {
+  getAll: async () => request('/api/jobs'),
+
+  create: async (data) => request('/api/jobs', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  cancel: async (id) => request(`/api/jobs/${id}`, { method: 'DELETE' }),
+};
+
+export const schedulerApi = {
+  preview: async (algorithm) => request(`/api/scheduler/queue?algorithm=${encodeURIComponent(algorithm)}`),
 };
 
 /**
@@ -175,17 +188,12 @@ export const systemApi = {
   checkHealth: async () => {
     const startTime = performance.now();
     try {
-      // Pinging the API endpoint
-      const res = await fetch(`${API_BASE}/api/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: '__healthcheck__', password: '' }),
-      });
+      const res = await fetch(`${API_BASE}/api/health`);
       const latency = Math.round(performance.now() - startTime);
-      // Even if 401/400 is returned, backend is up and running!
-      return { online: true, latency, status: res.status };
+      const health = res.ok ? await res.json() : null;
+      return { online: res.ok, latency, status: res.status, database: health?.database || 'DOWN' };
     } catch {
-      return { online: false, latency: null, status: null };
+      return { online: false, latency: null, status: null, database: 'UNKNOWN' };
     }
   },
 };

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appApi } from '../services/api';
-import { mockData } from '../services/mockData';
-import { Plus, GitBranch, Clock, Box, X, Search, ExternalLink, RefreshCw } from 'lucide-react';
+import emptyApplicationsImage from '../assets/empty-applications.svg';
+import PageArtwork from '../components/PageArtwork';
+import { Plus, GitBranch, Clock, Box, X, Search, RefreshCw } from 'lucide-react';
 
 export default function ApplicationsPage() {
   const { user } = useAuth();
@@ -13,29 +14,27 @@ export default function ApplicationsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showCreate, setShowCreate] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const loadApps = async (isManualRefresh = false) => {
+  const loadApps = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
-    else setLoading(true);
 
     try {
-      const userId = user?.id || 1;
-      const data = await appApi.getByUser(userId);
+      const data = await appApi.getByUser(user.id);
+      setError('');
       setApps(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.warn('Backend unavailable, falling back to cached applications:', err.message);
-      const fallback = await mockData.getApplications();
-      setApps(fallback);
+      setError(err.message || 'Unable to load applications.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    loadApps();
-  }, [user?.id]);
+    void loadApps();
+  }, [loadApps]);
 
   const formatDate = (ts) => {
     if (!ts) return '—';
@@ -76,6 +75,7 @@ export default function ApplicationsPage() {
               Manage your hosted web applications, container workloads, and automated deployments
             </p>
           </div>
+          <PageArtwork variant="applications" />
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               className="btn btn-secondary"
@@ -93,6 +93,8 @@ export default function ApplicationsPage() {
           </div>
         </div>
       </div>
+
+      {error && <div className="auth-error" role="alert">{error}</div>}
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
@@ -132,6 +134,14 @@ export default function ApplicationsPage() {
       {filteredApps.length === 0 ? (
         <div className="card">
           <div className="empty-state">
+            {apps.length === 0 && (
+              <img
+                className="empty-state-image"
+                src={emptyApplicationsImage}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
             <div className="empty-state-icon">
               <Box />
             </div>
@@ -181,11 +191,10 @@ export default function ApplicationsPage() {
 
       {showCreate && (
         <CreateAppModal
-          userId={user?.id || 1}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
-            loadApps();
+            void loadApps();
           }}
         />
       )}
@@ -193,13 +202,14 @@ export default function ApplicationsPage() {
   );
 }
 
-function CreateAppModal({ userId, onClose, onCreated }) {
+function CreateAppModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     name: '',
     repositoryUrl: '',
     branch: 'main',
-    buildCommand: 'mvn clean install',
-    startCommand: 'java -jar target/app.jar',
+    startCommand: '',
+    plan: 'BASIC',
+    containerPort: 8080,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -215,25 +225,16 @@ function CreateAppModal({ userId, onClose, onCreated }) {
     try {
       // Connect to real Spring Boot backend POST /api/applications
       await appApi.create({
-        userId,
         name: form.name.trim(),
         repositoryUrl: form.repositoryUrl.trim(),
         branch: form.branch.trim() || 'main',
-        buildCommand: form.buildCommand.trim(),
         startCommand: form.startCommand.trim(),
+        plan: form.plan,
+        containerPort: Number(form.containerPort),
       });
       onCreated();
     } catch (err) {
-      console.warn('Real backend call failed, falling back to mock create:', err.message);
-      try {
-        await mockData.createApplication({
-          ...form,
-          userId,
-        });
-        onCreated();
-      } catch (fallbackErr) {
-        setError(fallbackErr.message || err.message);
-      }
+      setError(err.message || 'Unable to create application.');
     } finally {
       setLoading(false);
     }
@@ -263,13 +264,15 @@ function CreateAppModal({ userId, onClose, onCreated }) {
             </div>
             <div className="form-group">
               <label className="form-label">Repository URL</label>
-              <input
+                <input
                 className="form-input"
+                  type="url"
                 value={form.repositoryUrl}
                 onChange={handleChange('repositoryUrl')}
-                placeholder="https://github.com/utkarsh-1-bit/Backend-Hosting-and-Management-Platform"
+                placeholder="https://github.com/acme/service"
                 required
               />
+              <div className="form-hint">Use a credential-free HTTPS Git repository URL.</div>
             </div>
             <div className="form-row">
               <div className="form-group">
@@ -283,14 +286,26 @@ function CreateAppModal({ userId, onClose, onCreated }) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Build Command</label>
+                <label className="form-label">Container Port</label>
                 <input
                   className="form-input"
-                  value={form.buildCommand}
-                  onChange={handleChange('buildCommand')}
-                  placeholder="mvn clean install"
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={form.containerPort}
+                  onChange={handleChange('containerPort')}
+                  required
                 />
+                <div className="form-hint">Use the port your app listens on inside the container (for example, 80 for Nginx or 8080 for Spring Boot).</div>
               </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Resource Plan</label>
+              <select className="form-input" value={form.plan} onChange={handleChange('plan')}>
+                <option value="BASIC">Basic · 0.5 CPU · 512 MB</option>
+                <option value="STANDARD">Standard · 1 CPU · 1 GB</option>
+                <option value="PREMIUM">Premium · 2 CPU · 2 GB</option>
+              </select>
             </div>
             <div className="form-group">
               <label className="form-label">Start Command</label>
@@ -300,7 +315,7 @@ function CreateAppModal({ userId, onClose, onCreated }) {
                 onChange={handleChange('startCommand')}
                 placeholder="java -jar target/app.jar"
               />
-              <div className="form-hint">The command executed inside the workload container.</div>
+              <div className="form-hint">Leave blank to use the image command. Set this only to override it.</div>
             </div>
           </div>
           <div className="modal-footer">
@@ -308,7 +323,7 @@ function CreateAppModal({ userId, onClose, onCreated }) {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <span className="spinner" /> : 'Deploy Application'}
+              {loading ? <span className="spinner" /> : 'Create Application'}
             </button>
           </div>
         </form>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Server } from 'lucide-react';
+import PageArtwork from '../components/PageArtwork';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -15,8 +16,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 10) {
+      setError('Password must be at least 10 characters');
       return;
     }
     setLoading(true);
@@ -39,6 +40,7 @@ export default function RegisterPage() {
           </div>
           <h1>Create account</h1>
           <p>Start deploying your backends in minutes</p>
+          <PageArtwork variant="auth" />
         </div>
 
         <div className="auth-card">
@@ -79,7 +81,9 @@ export default function RegisterPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="At least 10 characters"
+                minLength={10}
+                maxLength={72}
                 required
               />
             </div>

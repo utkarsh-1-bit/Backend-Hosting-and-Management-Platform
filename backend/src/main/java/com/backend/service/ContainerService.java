@@ -67,6 +67,7 @@ public class ContainerService {
 
         Container container = findById(id);
 
+        runtime.verifyAvailable();
         runtime.startContainer(
                 container.getDockerContainerId());
 
@@ -74,6 +75,20 @@ public class ContainerService {
                 id,
                 new Timestamp(
                         System.currentTimeMillis()));
+    }
+
+    public void restartContainer(Long id) {
+        Container container = findById(id);
+        runtime.verifyAvailable();
+        String runtimeStatus = runtime.getContainerStatus(container.getDockerContainerId());
+
+        if ("running".equalsIgnoreCase(runtimeStatus.trim())) {
+            runtime.stopContainer(container.getDockerContainerId());
+            containerDao.markStopped(id, new Timestamp(System.currentTimeMillis()));
+        }
+
+        runtime.startContainer(container.getDockerContainerId());
+        containerDao.markStarted(id, new Timestamp(System.currentTimeMillis()));
     }
 
     public void stopContainer(Long id) {

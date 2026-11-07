@@ -25,8 +25,8 @@ public class ApplicationDao {
         String sql = """
                 INSERT INTO applications
                 (user_id, name, repository_url, branch, build_command,
-                 start_command, status, plan)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 start_command, status, plan, container_port)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -44,6 +44,7 @@ public class ApplicationDao {
             ps.setString(6, application.getStartCommand());
             ps.setString(7, application.getStatus());
             ps.setString(8, application.getPlan());
+            ps.setInt(9, application.getContainerPort());
 
             return ps;
         }, keyHolder);
@@ -56,16 +57,16 @@ public class ApplicationDao {
 
         String sql = """
                 SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status, plan,
+                       build_command, start_command, status, plan, container_port,
                        created_at, updated_at
                 FROM applications
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new ApplicationRowMapper(),
-                id);
+        return jdbcTemplate.query(sql, new ApplicationRowMapper(), id)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     // 3. FIND ALL APPLICATIONS OF A USER
@@ -73,7 +74,7 @@ public class ApplicationDao {
 
         String sql = """
                 SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status, plan,
+                       build_command, start_command, status, plan, container_port,
                        created_at, updated_at
                 FROM applications
                 WHERE user_id = ?
@@ -91,7 +92,7 @@ public class ApplicationDao {
 
         String sql = """
                 SELECT id, user_id, name, repository_url, branch,
-                       build_command, start_command, status, plan,
+                       build_command, start_command, status, plan, container_port,
                        created_at, updated_at
                 FROM applications
                 ORDER BY created_at DESC
@@ -112,7 +113,8 @@ public class ApplicationDao {
                     branch = ?,
                     build_command = ?,
                     start_command = ?,
-                    plan = ?
+                    plan = ?,
+                    container_port = ?
                 WHERE id = ?
                 """;
 
@@ -124,6 +126,7 @@ public class ApplicationDao {
                 application.getBuildCommand(),
                 application.getStartCommand(),
                 application.getPlan(),
+                application.getContainerPort(),
                 application.getId());
     }
 

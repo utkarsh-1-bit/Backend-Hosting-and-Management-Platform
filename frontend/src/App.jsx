@@ -10,6 +10,7 @@ import JobsPage from './pages/JobsPage';
 import SchedulerPage from './pages/SchedulerPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
+import { ThemeProvider } from './context/ThemeContext';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -29,50 +30,52 @@ function PublicOnlyRoute({ children }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Authentication routes */}
-          <Route
-            path="/login"
-            element={
-              <PublicOnlyRoute>
-                <LoginPage />
-              </PublicOnlyRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PublicOnlyRoute>
-                <RegisterPage />
-              </PublicOnlyRoute>
-            }
-          />
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public Authentication routes */}
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <LoginPage />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <PublicOnlyRoute>
+                  <RegisterPage />
+                </PublicOnlyRoute>
+              }
+            />
 
-          {/* Authenticated Dashboard & Management routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="applications" element={<ApplicationsPage />} />
-            <Route path="applications/:id" element={<AppDetailPage />} />
-            <Route path="jobs" element={<JobsPage />} />
-            <Route path="scheduler" element={<SchedulerPage />} />
-            <Route path="logs" element={<LogsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
+            {/* Authenticated Dashboard & Management routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="applications" element={<ApplicationsPage />} />
+              <Route path="applications/:id" element={<AppDetailPage />} />
+              <Route path="jobs" element={<JobsPage />} />
+              <Route path="scheduler" element={<SchedulerPage />} />
+              <Route path="logs" element={<LogsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

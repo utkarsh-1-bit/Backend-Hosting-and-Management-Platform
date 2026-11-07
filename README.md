@@ -115,7 +115,7 @@ MySQL provides persistent storage for users, applications, workload jobs, contai
 
 Component	Technology
 Frontend	React.js, HTML, CSS, JavaScript
-Backend	Java 21, Spring Boot
+Backend	Java 25, Spring Boot
 API Communication	HTTP / REST API
 Database	MySQL
 Database Access	JDBC, JdbcTemplate, handwritten SQL
@@ -256,7 +256,7 @@ Prerequisites
 
 Install the following tools before running the project:
 
-* Java Development Kit (JDK) 21
+* Java Development Kit (JDK) 25
 * Maven
 * Node.js and npm
 * MySQL Server
@@ -284,7 +284,7 @@ spring.application.name=backend-hosting-management-platform
 spring.datasource.url=${DB_URL:jdbc:mysql://localhost:3306/backend_platform}
 spring.datasource.username=${DB_USERNAME}
 spring.datasource.password=${DB_PASSWORD}
-server.port=8080
+server.port=8081
 
 Set DB_USERNAME and DB_PASSWORD in your local environment before starting the backend. Do not commit database credentials to GitHub.
 
@@ -300,7 +300,7 @@ mvn spring-boot:run
 
 The backend should be available at:
 
-http://localhost:8080
+http://localhost:8081
 
 The exact API endpoints depend on the implemented controllers.
 
@@ -404,3 +404,29 @@ Team members name and their GitHub profiles are here-
 * Docker Documentation
 * Spring REST Guide
 
+## Implemented Local Setup
+
+Create the MySQL database before starting the backend:
+
+```sql
+CREATE DATABASE hostex;
+```
+
+The backend reads `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and optionally `DOCKER_CLI_PATH` (defaults to `docker`, which must be on `PATH`). Docker deployments require Docker Desktop/Engine to be installed and running. On PowerShell, configure these for the current terminal before starting it:
+
+```powershell
+$env:DB_URL = "jdbc:mysql://localhost:3306/hostex?serverTimezone=UTC"
+$env:DB_USERNAME = "your-mysql-user"
+$env:DB_PASSWORD = "your-mysql-password"
+$env:HOSTEX_AUTH_SECRET = "replace-with-a-random-secret-at-least-32-characters"
+# Optional when docker.exe is not on PATH:
+# $env:DOCKER_CLI_PATH = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+Set-Location backend
+.\mvnw.cmd spring-boot:run
+```
+
+The backend initializes tables from `backend/src/main/resources/db/schema.sql` by default and adds missing `plan` and `container_port` columns to existing application tables on startup. Keep the same strong `HOSTEX_AUTH_SECRET` across restarts and instances so issued sessions remain verifiable. Do not commit credentials.
+
+Start the frontend in a second terminal with `cd frontend` and `npm run dev`. Vite proxies `/api` requests to `http://localhost:8081`; set `VITE_API_URL` only when using a different API origin.
+
+Implemented API routes include `POST /api/users/register`, `POST /api/users/login`, `GET /api/health`, application CRUD and lifecycle routes under `/api/applications`, environment variables under `/api/applications/{id}/env`, jobs under `/api/jobs`, and queue previews at `/api/scheduler/queue?algorithm=FCFS|SJF|PRIORITY`. Login and registration return a signed bearer token; all application, environment, job, and scheduler routes require it. Application access is scoped to its owner.

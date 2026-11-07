@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
-import { Bell, Search, HelpCircle } from 'lucide-react';
-
+import { Moon, Sun } from 'lucide-react';
+import { useTheme } from '../context/useTheme';
 const pageTitles = {
   '/dashboard': 'Dashboard',
   '/applications': 'Applications',
@@ -12,6 +12,7 @@ const pageTitles = {
 
 export default function Header() {
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   const getPageName = () => {
     const path = location.pathname;
@@ -30,14 +31,14 @@ export default function Header() {
         </div>
       </div>
       <div className="header-right">
-        <button className="header-icon-btn" title="Search">
-          <Search />
-        </button>
-        <button className="header-icon-btn" title="Notifications">
-          <Bell />
-        </button>
-        <button className="header-icon-btn" title="Help">
-          <HelpCircle />
+        <button
+          className="header-icon-btn"
+          type="button"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
         </button>
       </div>
     </header>

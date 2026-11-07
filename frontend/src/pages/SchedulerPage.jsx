@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { mockData } from '../services/mockData';
+import { useState, useEffect, useCallback } from 'react';
+import { appApi, jobsApi, schedulerApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import PageArtwork from '../components/PageArtwork';
 import {
   Activity,
   Play,
@@ -12,40 +14,42 @@ import {
 } from 'lucide-react';
 
 export default function SchedulerPage() {
+  const { user } = useAuth();
   const [algorithm, setAlgorithm] = useState('FCFS');
   const [jobs, setJobs] = useState([]);
   const [apps, setApps] = useState([]);
   const [scheduledSequence, setScheduledSequence] = useState([]);
   const [loading, setLoading] = useState(true);
   const [runningSimulation, setRunningSimulation] = useState(false);
+  const [error, setError] = useState('');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      setLoading(true);
       const [jobsData, appsData] = await Promise.all([
-        mockData.getJobs(),
-        mockData.getApplications(),
+        jobsApi.getAll(),
+        appApi.getByUser(user.id),
       ]);
+      setError('');
       setJobs(jobsData);
       setApps(appsData);
     } catch (err) {
-      console.error('Failed to load scheduler data', err);
+      setError(err.message || 'Unable to load scheduling data.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   const handleRunSimulation = async () => {
     try {
       setRunningSimulation(true);
-      const res = await mockData.runScheduler(algorithm);
+      const res = await schedulerApi.preview(algorithm);
       setScheduledSequence(res);
     } catch (err) {
-      console.error('Failed simulation', err);
+      setError(err.message || 'Unable to preview queue order.');
     } finally {
       setRunningSimulation(false);
     }
@@ -61,16 +65,17 @@ export default function SchedulerPage() {
   const algoDescriptions = {
     FCFS: 'First-Come, First-Served processes jobs in order of arrival time. Fair and deterministic for sequential batch tasks.',
     SJF: 'Shortest Job First prioritizes tasks with the lowest estimated burst time, minimizing overall average wait time.',
-    PRIORITY: 'Priority scheduling handles high-urgency operations (P5 down to P1) first, essential for production deployments.',
+    PRIORITY: 'Priority scheduling selects the lowest priority value first, matching the backend scheduler policy.',
   };
 
   return (
     <div className="scheduler-page">
-      <div className="page-header">
+      <div className="page-header page-header-illustrated">
         <div>
           <h1 className="page-title">Job Scheduling Engine</h1>
-          <p className="page-subtitle">Configure scheduling policies and observe dynamic queue dispatcher execution</p>
+          <p className="page-subtitle">Compare queued workloads using the configured scheduling policy</p>
         </div>
+        <PageArtwork variant="scheduler" />
         <button
           className="btn btn-primary"
           onClick={handleRunSimulation}
@@ -81,9 +86,11 @@ export default function SchedulerPage() {
           ) : (
             <Play size={16} />
           )}
-          Run {algorithm} Simulation
+          Preview {algorithm} Order
         </button>
       </div>
+
+      {error && <div className="auth-error" role="alert">{error}</div>}
 
       <div className="card" style={{ marginBottom: '24px' }}>
         <div className="card-header">
@@ -165,8 +172,8 @@ export default function SchedulerPage() {
         <div className="card">
           <div className="card-header">
             <div>
-              <h2 className="card-title">Simulated Dispatch Order</h2>
-              <p className="card-subtitle">Evaluated order according to {algorithm}</p>
+              <h2 className="card-title">Queue Order Preview</h2>
+              <p className="card-subtitle">Server-calculated order according to {algorithm}</p>
             </div>
             <Sparkles size={18} style={{ color: 'var(--accent-primary)' }} />
           </div>
@@ -174,7 +181,7 @@ export default function SchedulerPage() {
           {scheduledSequence.length === 0 ? (
             <div className="empty-state" style={{ minHeight: '260px' }}>
               <Cpu size={36} style={{ color: 'var(--text-tertiary)', marginBottom: '8px' }} />
-              <p>Click &quot;Run {algorithm} Simulation&quot; above to execute the dispatch calculation</p>
+              <p>Preview the queued jobs in the selected order</p>
             </div>
           ) : (
             <div className="scheduler-queue" style={{ padding: '0 24px 24px' }}>

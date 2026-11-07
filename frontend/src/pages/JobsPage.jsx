@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { mockData } from '../services/mockData';
+import { useState, useEffect, useCallback } from 'react';
+import { appApi, jobsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import PageArtwork from '../components/PageArtwork';
 import {
   CalendarClock,
   Play,
   RotateCcw,
   Hammer,
-  AlertCircle,
   Plus,
   X,
   Clock,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function JobsPage() {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,33 +28,36 @@ export default function JobsPage() {
 
   const [formData, setFormData] = useState({
     applicationId: '',
-    jobType: 'BUILD',
+    jobType: 'DEPLOY',
     priority: 2,
     burstTime: 30,
   });
+  const [error, setError] = useState('');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      setLoading(true);
       const [jobsData, appsData] = await Promise.all([
-        mockData.getJobs(),
-        mockData.getApplications(),
+        jobsApi.getAll(),
+        appApi.getByUser(user.id),
       ]);
+      setError('');
       setJobs(jobsData);
       setApps(appsData);
-      if (appsData.length > 0 && !formData.applicationId) {
-        setFormData(prev => ({ ...prev, applicationId: appsData[0].id }));
+      if (appsData.length > 0) {
+        setFormData((previous) => previous.applicationId
+          ? previous
+          : { ...previous, applicationId: appsData[0].id });
       }
     } catch (err) {
-      console.error('Failed to load jobs', err);
+      setError(err.message || 'Unable to load workload jobs.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   const handleCreateJob = async (e) => {
     e.preventDefault();
@@ -60,7 +65,7 @@ export default function JobsPage() {
 
     try {
       setSubmitting(true);
-      await mockData.createJob({
+      await jobsApi.create({
         applicationId: Number(formData.applicationId),
         jobType: formData.jobType,
         priority: Number(formData.priority),
@@ -69,7 +74,7 @@ export default function JobsPage() {
       setShowModal(false);
       await loadData();
     } catch (err) {
-      console.error('Failed to create job', err);
+      setError(err.message || 'Unable to create workload job.');
     } finally {
       setSubmitting(false);
     }
@@ -77,10 +82,10 @@ export default function JobsPage() {
 
   const handleCancelJob = async (id) => {
     try {
-      await mockData.cancelJob(id);
+      await jobsApi.cancel(id);
       await loadData();
     } catch (err) {
-      console.error('Failed to cancel job', err);
+      setError(err.message || 'Unable to cancel workload job.');
     }
   };
 
@@ -134,16 +139,19 @@ export default function JobsPage() {
 
   return (
     <div className="jobs-page">
-      <div className="page-header">
+      <div className="page-header page-header-illustrated">
         <div>
           <h1 className="page-title">Workload Jobs</h1>
           <p className="page-subtitle">Track, dispatch, and manage asynchronous deployment and build tasks</p>
         </div>
+        <PageArtwork variant="jobs" />
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={16} />
           Create Job
         </button>
       </div>
+
+      {error && <div className="auth-error" role="alert">{error}</div>}
 
       <div className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card">
@@ -190,7 +198,6 @@ export default function JobsPage() {
               onChange={(e) => setFilterType(e.target.value)}
             >
               <option value="ALL">All Types</option>
-              <option value="BUILD">Build Jobs</option>
               <option value="DEPLOY">Deploy Jobs</option>
               <option value="RESTART">Restart Jobs</option>
             </select>
@@ -256,15 +263,15 @@ export default function JobsPage() {
                           fontSize: '0.75rem',
                           fontWeight: 700,
                           backgroundColor:
-                            job.priority >= 3
+                            job.priority <= 2
                               ? 'var(--danger-muted)'
-                              : job.priority === 2
+                              : job.priority === 3
                               ? 'var(--warning-muted)'
                               : 'var(--info-muted)',
                           color:
-                            job.priority >= 3
+                            job.priority <= 2
                               ? 'var(--danger)'
-                              : job.priority === 2
+                              : job.priority === 3
                               ? 'var(--warning)'
                               : 'var(--info)',
                         }}
@@ -330,13 +337,12 @@ export default function JobsPage() {
                       value={formData.jobType}
                       onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
                     >
-                      <option value="BUILD">BUILD</option>
                       <option value="DEPLOY">DEPLOY</option>
                       <option value="RESTART">RESTART</option>
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Priority (1: Low to 5: High)</label>
+                    <label className="form-label">Priority (1: High to 5: Low)</label>
                     <input
                       type="number"
                       min="1"

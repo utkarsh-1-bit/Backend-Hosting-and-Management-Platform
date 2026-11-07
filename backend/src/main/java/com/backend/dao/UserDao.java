@@ -51,10 +51,10 @@ public class UserDao {
                 WHERE email = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new UserRowMapper(),
-                email);
+        return jdbcTemplate.query(sql, new UserRowMapper(), email)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     // 3. Find by ID
@@ -66,10 +66,10 @@ public class UserDao {
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(
-                sql,
-                new UserRowMapper(),
-                id);
+        return jdbcTemplate.query(sql, new UserRowMapper(), id)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     // 4. Find all Users
